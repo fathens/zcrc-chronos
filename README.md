@@ -79,7 +79,12 @@ uvicorn src.api.server:app --reload
 - `GET /api/v1/models` - 利用可能なモデル一覧
 - `POST /api/v1/predict` - 時系列予測の実行
 
-詳細なAPIドキュメントは、サーバー起動後に `/api/v1/docs` で確認できます。
+詳細なAPIドキュメントは、サーバー起動後に以下のURLで確認できます：
+
+- Swagger UI: `/api/v1/docs` - インタラクティブなAPIドキュメント（エンドポイントのテスト実行が可能）
+- ReDoc: `/api/v1/redoc` - 読みやすい形式のAPIドキュメント
+
+これらのドキュメントでは、各エンドポイントの詳細な説明、リクエスト/レスポンスのスキーマ、例などを確認できます。
 
 ## 開発
 

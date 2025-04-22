@@ -1,0 +1,40 @@
+# アプリケーション設定
+
+# サーバー設定
+server:
+  host: "0.0.0.0"
+  port: 8000
+  debug: true
+  workers: 4
+  reload: true  # 開発環境用
+
+# API設定
+api:
+  title: "zcrc-chronos API"
+  description: "chronos-boltを使用した時系列予測API"
+  version: "0.1.0"
+  prefix: "/api/v1"
+  cors_origins:
+    - "*"  # 本番環境では特定のオリジンに制限すること
+  rate_limit: 100  # リクエスト/分
+
+# ログ設定
+logging:
+  level: "INFO"
+  format: "{time} | {level} | {message}"
+  file: "logs/app.log"
+  rotation: "500 MB"
+  retention: "10 days"
+
+# データ設定
+data:
+  raw_dir: "data/raw"
+  processed_dir: "data/processed"
+  models_dir: "data/models"
+  default_model: "default_model"
+
+# セキュリティ設定
+security:
+  enable_auth: false  # 本番環境ではtrueに設定
+  api_key_header: "X-API-Key"
+  allowed_api_keys: []  # 本番環境では設定する

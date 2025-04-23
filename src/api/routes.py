@@ -9,6 +9,8 @@ import yaml
 import os
 from loguru import logger
 
+from src.models.predictor import TimeSeriesPredictor
+
 # 設定ファイルのパス
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "app_config.yaml")
 MODEL_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "model_config.yaml")
@@ -58,7 +60,8 @@ class TimeSeriesData(BaseModel):
 class PredictionRequest(BaseModel):
     """予測リクエストモデル"""
     data: TimeSeriesData
-    horizon: int = 24  # 予測期間（デフォルト24時間）
+    horizon: Optional[int] = None  # 予測期間（ポイント数）
+    forecast_until: Optional[datetime.datetime] = None  # 予測終了時刻
     model_name: Optional[str] = "chronos_default"
     model_params: Optional[Dict[str, Any]] = None
 
@@ -69,13 +72,38 @@ class PredictionRequest(BaseModel):
                     "timestamp": ["2023-01-01T00:00:00", "2023-01-01T01:00:00", "2023-01-01T02:00:00"],
                     "values": [10.5, 11.2, 10.8]
                 },
-                "horizon": 24,
+                "forecast_until": "2023-01-02T02:00:00",
                 "model_name": "chronos_default",
                 "model_params": {
                     "seasonality_mode": "multiplicative"
                 }
             }
         }
+
+    @field_validator('horizon', 'forecast_until')
+    def validate_forecast_params(cls, v, info):
+        """
+        horizonとforecast_untilの少なくとも一方が指定されていることを検証
+        """
+        # 現在のモデルのデータを取得
+        data = info.data
+
+        # 現在のフィールド名を取得
+        field_name = info.field_name
+
+        # horizonの検証
+        if field_name == 'horizon' and v is None:
+            # forecast_untilが指定されていない場合はエラー
+            if 'forecast_until' not in data or data['forecast_until'] is None:
+                raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        # forecast_untilの検証
+        if field_name == 'forecast_until' and v is None:
+            # horizonが指定されていない場合はエラー
+            if 'horizon' not in data or data['horizon'] is None:
+                raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        return v
 
 class PredictionResponse(BaseModel):
     """予測レスポンスモデル"""
@@ -143,35 +171,52 @@ async def predict(request: PredictionRequest):
     時系列データの予測を実行
     """
     try:
-        # ここでは実際の予測処理は実装せず、ダミーデータを返す
-        # 実際の実装では、chronos-boltを使用して予測を行う
+        # 予測期間の計算
+        horizon = None
+        if request.horizon is not None:
+            # horizonが指定されている場合はそのまま使用
+            horizon = request.horizon
+        elif request.forecast_until is not None:
+            # forecast_untilが指定されている場合は、最後のタイムスタンプとの差から予測期間を計算
+            last_timestamp = request.data.timestamp[-1]
 
-        # ダミーの予測結果を生成
-        forecast_timestamp = [
-            request.data.timestamp[-1] + datetime.timedelta(hours=i+1)
-            for i in range(request.horizon)
-        ]
+            # タイムスタンプの間隔を計算（最後の2つのタイムスタンプの差）
+            if len(request.data.timestamp) >= 2:
+                interval = request.data.timestamp[-1] - request.data.timestamp[-2]
+            else:
+                # デフォルトは1時間
+                interval = datetime.timedelta(hours=1)
 
-        import random
-        last_value = request.data.values[-1]
-        forecast_values = [
-            last_value + random.uniform(-0.5, 0.5)
-            for _ in range(request.horizon)
-        ]
+            # 予測期間を計算（切り上げ）
+            time_diff = request.forecast_until - last_timestamp
+            horizon = int((time_diff.total_seconds() / interval.total_seconds()) + 0.5)
+
+            # 予測期間が0以下の場合はエラー
+            if horizon <= 0:
+                raise ValueError("forecast_untilは最後のタイムスタンプより後の時刻を指定してください")
+        else:
+            # どちらも指定されていない場合はエラー（バリデーションで既にチェックされているはず）
+            raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        # 予測モデルの初期化
+        predictor = TimeSeriesPredictor(
+            model_name=request.model_name,
+            model_params=request.model_params
+        )
+
+        # モデルの学習
+        predictor.fit(request.data.timestamp, request.data.values)
+
+        # 予測の実行
+        forecast_timestamps, forecast_values, metadata = predictor.predict(horizon=horizon)
 
         # レスポンスを作成
         response = PredictionResponse(
-            forecast_timestamp=forecast_timestamp,
+            forecast_timestamp=forecast_timestamps,
             forecast_values=forecast_values,
             model_name=request.model_name,
-            confidence_intervals={
-                "lower_95": [v - 0.5 for v in forecast_values],
-                "upper_95": [v + 0.5 for v in forecast_values]
-            },
-            metrics={
-                "mse": 0.15,
-                "mae": 0.12
-            }
+            confidence_intervals=metadata.get('confidence_intervals'),
+            metrics=metadata.get('metrics')
         )
 
         return response

@@ -55,7 +55,7 @@ def test_predict_endpoint():
     now = datetime.datetime.now()
     timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
     timestamps_str = [ts.isoformat() for ts in timestamps]
-    
+
     request_data = {
         "data": {
             "timestamp": timestamps_str,
@@ -64,21 +64,61 @@ def test_predict_endpoint():
         "horizon": 12,
         "model_name": "chronos_default"
     }
-    
+
     response = client.post("/api/v1/predict", json=request_data)
     assert response.status_code == 200
     data = response.json()
-    
+
     # レスポンスの検証
     assert "forecast_timestamp" in data
     assert "forecast_values" in data
     assert "model_name" in data
     assert "confidence_intervals" in data
     assert "metrics" in data
-    
+
     # 予測値の数が指定したhorizonと一致することを確認
     assert len(data["forecast_timestamp"]) == request_data["horizon"]
     assert len(data["forecast_values"]) == request_data["horizon"]
+
+def test_predict_endpoint_with_forecast_until():
+    """
+    forecast_untilパラメータを使用した予測エンドポイントのテスト
+    """
+    # テスト用のリクエストデータ
+    now = datetime.datetime.now()
+    timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
+    timestamps_str = [ts.isoformat() for ts in timestamps]
+
+    # 予測終了時刻を設定（最後のタイムスタンプから12時間後）
+    forecast_until = now + datetime.timedelta(hours=12)
+
+    request_data = {
+        "data": {
+            "timestamp": timestamps_str,
+            "values": [10.0 + i * 0.1 for i in range(24)]
+        },
+        "forecast_until": forecast_until.isoformat(),
+        "model_name": "chronos_default"
+    }
+
+    response = client.post("/api/v1/predict", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+
+    # レスポンスの検証
+    assert "forecast_timestamp" in data
+    assert "forecast_values" in data
+    assert "model_name" in data
+    assert "confidence_intervals" in data
+    assert "metrics" in data
+
+    # 予測値が存在することを確認
+    assert len(data["forecast_timestamp"]) > 0
+    assert len(data["forecast_values"]) > 0
+
+    # 最後の予測時刻がforecast_until以降であることを確認
+    last_forecast_time = datetime.datetime.fromisoformat(data["forecast_timestamp"][-1])
+    assert last_forecast_time >= forecast_until
 
 def test_predict_endpoint_invalid_data():
     """
@@ -92,7 +132,7 @@ def test_predict_endpoint_invalid_data():
         },
         "horizon": 12
     }
-    
+
     response = client.post("/api/v1/predict", json=invalid_data)
     # バリデーションエラーが発生することを期待
     assert response.status_code == 422

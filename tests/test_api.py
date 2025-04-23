@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 import json
 import datetime
-from src.api.server import app
+from src.api.server import app, ZeroShotPredictionRequest
 
 # テストクライアントの初期化
 client = TestClient(app)
@@ -134,5 +134,53 @@ def test_predict_endpoint_invalid_data():
     }
 
     response = client.post("/api/v1/predict", json=invalid_data)
+    # バリデーションエラーが発生することを期待
+    assert response.status_code == 422
+
+def test_zero_shot_predict_endpoint():
+    """
+    ゼロショット予測エンドポイントのテスト
+    """
+    # テスト用のリクエストデータ
+    request_data = {
+        "context": "今後の株価は上昇傾向にあり、安定した成長が見込まれる。",
+        "horizon": 12,
+        "model_name": "chronos_default"
+    }
+
+    response = client.post("/predict", json=request_data)
+    assert response.status_code == 200
+    data = response.json()
+
+    # レスポンスの検証
+    assert "forecast_timestamp" in data
+    assert "forecast_values" in data
+    assert "model_name" in data
+    assert "model_type" in data
+    assert "context" in data
+    assert "confidence_intervals" in data
+    assert "metrics" in data
+
+    # 予測値の数が指定したhorizonと一致することを確認
+    assert len(data["forecast_timestamp"]) == request_data["horizon"]
+    assert len(data["forecast_values"]) == request_data["horizon"]
+
+    # モデルタイプがzero_shotであることを確認
+    assert data["model_type"] == "zero_shot"
+
+    # コンテキストが一致することを確認
+    assert data["context"] == request_data["context"]
+
+def test_zero_shot_predict_endpoint_invalid_data():
+    """
+    ゼロショット予測エンドポイントの無効なデータに対するテスト
+    """
+    # contextが欠けている無効なデータ
+    invalid_data = {
+        "horizon": 12,
+        "model_name": "chronos_default"
+    }
+
+    response = client.post("/predict", json=invalid_data)
     # バリデーションエラーが発生することを期待
     assert response.status_code == 422

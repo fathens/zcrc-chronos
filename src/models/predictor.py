@@ -232,6 +232,89 @@ class TimeSeriesPredictor:
             logger.error(f"予測に失敗しました: {e}")
             raise ValueError(f"予測に失敗しました: {e}")
 
+    def zero_shot_predict(self, context: str, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
+        """
+        ゼロショット予測を実行
+
+        Args:
+            context: 予測のためのコンテキスト情報（テキスト）
+            horizon: 予測期間
+
+        Returns:
+            予測期間のタイムスタンプ、予測値、メタデータのタプル
+        """
+        # 実際の実装では、chronos-boltライブラリを使用してゼロショット予測を実行
+        # ここではダミー実装
+        logger.info(f"モデル '{self.model_name}' によるゼロショット予測を開始します（期間: {horizon}）")
+
+        try:
+            # 現在の時刻を取得
+            now = datetime.datetime.now()
+
+            # 頻度に基づいて時間間隔を設定（デフォルトは1時間）
+            frequency = self.config['default_model']['chronos'].get('frequency', 'H')
+            if frequency == 'H':
+                delta = datetime.timedelta(hours=1)
+            elif frequency == 'D':
+                delta = datetime.timedelta(days=1)
+            elif frequency == 'W':
+                delta = datetime.timedelta(weeks=1)
+            else:
+                delta = datetime.timedelta(hours=1)
+
+            # 予測期間のタイムスタンプを生成
+            forecast_timestamps = [now + delta * (i+1) for i in range(horizon)]
+
+            # コンテキストに基づいて初期値を設定
+            # 実際の実装では、テキスト情報から適切な初期値を推定
+            base_value = 10.0
+
+            # コンテキストに特定のキーワードが含まれている場合、値を調整
+            if "上昇" in context or "増加" in context:
+                trend = 0.2  # 上昇トレンド
+            elif "下降" in context or "減少" in context:
+                trend = -0.2  # 下降トレンド
+            else:
+                trend = 0.0  # フラットトレンド
+
+            # 変動性の設定
+            if "安定" in context:
+                volatility = 0.05
+            elif "不安定" in context or "変動" in context:
+                volatility = 0.2
+            else:
+                volatility = 0.1
+
+            # ダミーの予測値を生成
+            import random
+            forecast_values = [base_value + trend * i + random.uniform(-volatility, volatility) * base_value for i in range(horizon)]
+
+            # 信頼区間を生成
+            lower_95 = [v - abs(v) * 0.15 for v in forecast_values]
+            upper_95 = [v + abs(v) * 0.15 for v in forecast_values]
+
+            # メタデータを生成
+            metadata = {
+                'model_name': self.model_name,
+                'model_type': 'zero_shot',
+                'context': context,
+                'confidence_intervals': {
+                    'lower_95': lower_95,
+                    'upper_95': upper_95
+                },
+                'metrics': {
+                    'confidence': 0.7,  # ゼロショット予測の信頼度
+                }
+            }
+
+            logger.info(f"ゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
+
+            return forecast_timestamps, forecast_values, metadata
+
+        except Exception as e:
+            logger.error(f"ゼロショット予測に失敗しました: {e}")
+            raise ValueError(f"ゼロショット予測に失敗しました: {e}")
+
     def save_model(self, path: str) -> None:
         """
         モデルを保存

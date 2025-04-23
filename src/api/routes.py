@@ -130,6 +130,56 @@ class PredictionResponse(BaseModel):
             }
         }
 
+class AutoGluonPredictionRequest(BaseModel):
+    """AutoGluon予測リクエストモデル"""
+    data: TimeSeriesData
+    horizon: Optional[int] = None  # 予測期間（ポイント数）
+    forecast_until: Optional[datetime.datetime] = None  # 予測終了時刻
+    model_name: Optional[str] = "chronos_default"
+    model_params: Optional[Dict[str, Any]] = None
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "data": {
+                    "timestamp": ["2023-01-01T00:00:00", "2023-01-01T01:00:00", "2023-01-01T02:00:00"],
+                    "values": [10.5, 11.2, 10.8]
+                },
+                "horizon": 24,
+                "model_name": "chronos_default",
+                "model_params": {
+                    "autogluon_params": {
+                        "presets": "base"
+                    }
+                }
+            }
+        }
+
+    @field_validator('horizon', 'forecast_until')
+    def validate_forecast_params(cls, v, info):
+        """
+        horizonとforecast_untilの少なくとも一方が指定されていることを検証
+        """
+        # 現在のモデルのデータを取得
+        data = info.data
+
+        # 現在のフィールド名を取得
+        field_name = info.field_name
+
+        # horizonの検証
+        if field_name == 'horizon' and v is None:
+            # forecast_untilが指定されていない場合はエラー
+            if 'forecast_until' not in data or data['forecast_until'] is None:
+                raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        # forecast_untilの検証
+        if field_name == 'forecast_until' and v is None:
+            # horizonが指定されていない場合はエラー
+            if 'horizon' not in data or data['horizon'] is None:
+                raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        return v
+
 class ZeroShotPredictionRequest(BaseModel):
     """ゼロショット予測リクエストモデル"""
     context: str
@@ -277,3 +327,64 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
     except Exception as e:
         logger.error(f"ゼロショット予測処理に失敗しました: {e}")
         raise HTTPException(status_code=500, detail=f"ゼロショット予測処理に失敗しました: {str(e)}")
+
+# AutoGluon予測エンドポイント
+@router.post("/predict_with_autogluon", response_model=PredictionResponse, tags=["prediction"])
+async def predict_with_autogluon(request: AutoGluonPredictionRequest):
+    """
+    AutoGluonを使用した時系列データの予測を実行
+    """
+    try:
+        # 予測期間の計算
+        horizon = None
+        if request.horizon is not None:
+            # horizonが指定されている場合はそのまま使用
+            horizon = request.horizon
+        elif request.forecast_until is not None:
+            # forecast_untilが指定されている場合は、最後のタイムスタンプとの差から予測期間を計算
+            last_timestamp = request.data.timestamp[-1]
+
+            # タイムスタンプの間隔を計算（最後の2つのタイムスタンプの差）
+            if len(request.data.timestamp) >= 2:
+                interval = request.data.timestamp[-1] - request.data.timestamp[-2]
+            else:
+                # デフォルトは1時間
+                interval = datetime.timedelta(hours=1)
+
+            # 予測期間を計算（切り上げ）
+            time_diff = request.forecast_until - last_timestamp
+            horizon = int((time_diff.total_seconds() / interval.total_seconds()) + 0.5)
+
+            # 予測期間が0以下の場合はエラー
+            if horizon <= 0:
+                raise ValueError("forecast_untilは最後のタイムスタンプより後の時刻を指定してください")
+        else:
+            # どちらも指定されていない場合はエラー（バリデーションで既にチェックされているはず）
+            raise ValueError("horizonとforecast_untilの少なくとも一方を指定してください")
+
+        # 予測モデルの初期化
+        predictor = TimeSeriesPredictor(
+            model_name=request.model_name,
+            model_params=request.model_params
+        )
+
+        # AutoGluonを使用した予測の実行
+        forecast_timestamps, forecast_values, metadata = predictor.predict_with_autogluon(
+            request.data.timestamp, 
+            request.data.values, 
+            horizon=horizon
+        )
+
+        # レスポンスを作成
+        response = PredictionResponse(
+            forecast_timestamp=forecast_timestamps,
+            forecast_values=forecast_values,
+            model_name=request.model_name,
+            confidence_intervals=metadata.get('confidence_intervals'),
+            metrics=metadata.get('metrics')
+        )
+
+        return response
+    except Exception as e:
+        logger.error(f"AutoGluon予測処理に失敗しました: {e}")
+        raise HTTPException(status_code=500, detail=f"AutoGluon予測処理に失敗しました: {str(e)}")

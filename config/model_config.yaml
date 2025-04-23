@@ -5,14 +5,14 @@ default_model:
   name: "chronos_default"
   version: "1.0.0"
   description: "デフォルトの時系列予測モデル"
-  
+
   # chronos-bolt設定
   chronos:
     model_type: "prophet"  # 'prophet', 'arima', 'lstm' など
     forecast_horizon: 24   # 予測期間（時間単位）
     frequency: "H"         # 'H'（時間）, 'D'（日）, 'W'（週）など
     seasonality_mode: "multiplicative"
-    
+
     # Prophetモデル固有のパラメータ
     prophet_params:
       yearly_seasonality: "auto"
@@ -20,13 +20,13 @@ default_model:
       daily_seasonality: "auto"
       changepoint_prior_scale: 0.05
       seasonality_prior_scale: 10.0
-      
+
     # ARIMAモデル固有のパラメータ
     arima_params:
       p: 2  # 自己回帰項の次数
       d: 1  # 差分次数
       q: 2  # 移動平均項の次数
-      
+
     # LSTMモデル固有のパラメータ
     lstm_params:
       units: 50
@@ -35,13 +35,19 @@ default_model:
       epochs: 50
       batch_size: 32
 
+    # AutoGluon固有のパラメータ
+    autogluon_params:
+      time_limit: 60  # 学習時間制限（秒）
+      eval_metric: "mean_absolute_error"
+      presets: "base"
+
 # 学習設定
 training:
   train_test_split: 0.8  # 訓練データの割合
   validation_size: 0.1   # 検証データの割合
   cross_validation_folds: 3
   early_stopping_patience: 5
-  
+
 # 評価指標
 evaluation:
   metrics:
@@ -49,7 +55,7 @@ evaluation:
     - "rmse"  # 平方根平均二乗誤差
     - "mae"   # 平均絶対誤差
     - "mape"  # 平均絶対パーセント誤差
-  
+
 # 前処理設定
 preprocessing:
   impute_missing: true
@@ -58,7 +64,7 @@ preprocessing:
   normalization_method: "minmax"  # 'minmax', 'standard'
   outlier_detection: true
   outlier_method: "iqr"  # 'iqr', 'zscore'
-  
+
 # 特徴量エンジニアリング
 feature_engineering:
   lag_features: [1, 7, 14]  # ラグ特徴量

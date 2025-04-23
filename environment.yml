@@ -7,23 +7,23 @@ dependencies:
   - pip
   - pip:
     # Core dependencies
-    - chronos-bolt>=0.1.0  # 時系列予測ライブラリ
+    - chronos-bolt>=1.5.1  # 時系列予測ライブラリ
     - fastapi>=0.95.0      # APIフレームワーク
     - uvicorn>=0.21.0      # ASGIサーバー
     - pydantic>=2.0.0      # データバリデーション
     - pyyaml>=6.0          # YAML設定ファイル
-    
+
     # Data processing
     - pandas>=2.0.0        # データ処理
     - numpy>=1.24.0        # 数値計算
     - scikit-learn>=1.2.0  # 機械学習ユーティリティ
-    
+
     # Utilities
     - python-dotenv>=1.0.0 # 環境変数管理
     - loguru>=0.7.0        # ロギング
     - pytest>=7.3.1        # テスト
     - httpx>=0.24.0        # HTTPクライアント（テスト用）
-    
+
     # Optional dependencies
     - matplotlib>=3.7.0    # 可視化（オプション）
     - plotly>=5.14.0       # インタラクティブ可視化（オプション）

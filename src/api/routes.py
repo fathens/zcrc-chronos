@@ -130,6 +130,27 @@ class PredictionResponse(BaseModel):
             }
         }
 
+class ZeroShotPredictionRequest(BaseModel):
+    """ゼロショット予測リクエストモデル"""
+    context: str
+    horizon: int = 24
+    frequency: Optional[str] = "H"
+    model_name: Optional[str] = "chronos_default"
+    model_params: Optional[Dict[str, Any]] = None
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "context": "今後3日間は気温が上昇し、需要が増加する見込みです。",
+                "horizon": 72,
+                "frequency": "H",
+                "model_name": "chronos_default",
+                "model_params": {
+                    "seasonality_mode": "multiplicative"
+                }
+            }
+        }
+
 class ModelInfo(BaseModel):
     """モデル情報モデル"""
     name: str
@@ -223,3 +244,36 @@ async def predict(request: PredictionRequest):
     except Exception as e:
         logger.error(f"予測処理に失敗しました: {e}")
         raise HTTPException(status_code=500, detail=f"予測処理に失敗しました: {str(e)}")
+
+# ゼロショット予測エンドポイント
+@router.post("/predict_zero_shot", response_model=PredictionResponse, tags=["prediction"])
+async def predict_zero_shot(request: ZeroShotPredictionRequest):
+    """
+    コンテキスト情報に基づくゼロショット予測を実行
+    """
+    try:
+        # 予測モデルの初期化
+        predictor = TimeSeriesPredictor(
+            model_name=request.model_name,
+            model_params=request.model_params
+        )
+
+        # ゼロショット予測の実行
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            context=request.context,
+            horizon=request.horizon
+        )
+
+        # レスポンスを作成
+        response = PredictionResponse(
+            forecast_timestamp=forecast_timestamps,
+            forecast_values=forecast_values,
+            model_name=request.model_name,
+            confidence_intervals=metadata.get('confidence_intervals'),
+            metrics=metadata.get('metrics')
+        )
+
+        return response
+    except Exception as e:
+        logger.error(f"ゼロショット予測処理に失敗しました: {e}")
+        raise HTTPException(status_code=500, detail=f"ゼロショット予測処理に失敗しました: {str(e)}")

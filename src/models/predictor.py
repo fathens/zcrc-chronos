@@ -12,10 +12,9 @@ from loguru import logger
 # chronos-boltライブラリをインポート
 try:
     import chronos_bolt
-    CHRONOS_BOLT_AVAILABLE = True
 except ImportError:
-    logger.warning("chronos-boltライブラリをインポートできませんでした。ダミー実装を使用します。")
-    CHRONOS_BOLT_AVAILABLE = False
+    logger.error("chronos-boltライブラリをインポートできませんでした。")
+    raise ImportError("chronos-boltライブラリが必要です。インストールしてください。")
 
 # 設定ファイルのパス
 MODEL_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "model_config.yaml")
@@ -274,91 +273,37 @@ class TimeSeriesPredictor:
             # モデルパラメータの設定
             model_params = {**self.config['default_model']['chronos'], **self.model_params} if self.model_params else self.config['default_model']['chronos']
 
-            # chronos-boltライブラリが利用可能な場合は実際の実装を使用
-            if CHRONOS_BOLT_AVAILABLE:
-                try:
-                    logger.info("chronos-boltライブラリを使用してゼロショット予測を実行します")
+            # chronos-boltライブラリを使用してゼロショット予測を実行
+            logger.info("chronos-boltライブラリを使用してゼロショット予測を実行します")
 
-                    # ゼロショット予測モデルの初期化
-                    zero_shot_model = chronos_bolt.ZeroShotPredictor(model_params)
+            # ゼロショット予測モデルの初期化
+            zero_shot_model = chronos_bolt.ZeroShotPredictor(model_params)
 
-                    # コンテキスト情報を使用して予測を実行
-                    forecast_result = zero_shot_model.predict(context=context, horizon=horizon)
+            # コンテキスト情報を使用して予測を実行
+            forecast_result = zero_shot_model.predict(context=context, horizon=horizon)
 
-                    # 予測結果から値を取得
-                    forecast_values = forecast_result.values
+            # 予測結果から値を取得
+            forecast_values = forecast_result.values
 
-                    # 信頼区間を取得
-                    confidence_intervals = {
-                        'lower_95': forecast_result.confidence_intervals.get('lower_95', []),
-                        'upper_95': forecast_result.confidence_intervals.get('upper_95', [])
-                    }
+            # 信頼区間を取得
+            confidence_intervals = {
+                'lower_95': forecast_result.confidence_intervals.get('lower_95', []),
+                'upper_95': forecast_result.confidence_intervals.get('upper_95', [])
+            }
 
-                    # メトリクスを取得
-                    metrics = forecast_result.metrics
-
-                    # メタデータを生成
-                    metadata = {
-                        'model_name': self.model_name,
-                        'model_type': 'zero_shot',
-                        'context': context,
-                        'confidence_intervals': confidence_intervals,
-                        'metrics': metrics
-                    }
-
-                    logger.info(f"chronos-boltによるゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
-
-                    return forecast_timestamps, forecast_values, metadata
-
-                except Exception as e:
-                    logger.error(f"chronos-boltによるゼロショット予測に失敗しました: {e}")
-                    logger.warning("ダミー実装にフォールバックします")
-
-            # chronos-boltライブラリが利用できない場合、またはエラーが発生した場合はダミー実装を使用
-            logger.info("ダミー実装によるゼロショット予測を実行します")
-
-            # コンテキストに基づいて初期値を設定
-            base_value = 10.0
-
-            # コンテキストに特定のキーワードが含まれている場合、値を調整
-            if "上昇" in context or "増加" in context:
-                trend = 0.2  # 上昇トレンド
-            elif "下降" in context or "減少" in context:
-                trend = -0.2  # 下降トレンド
-            else:
-                trend = 0.0  # フラットトレンド
-
-            # 変動性の設定
-            if "安定" in context:
-                volatility = 0.05
-            elif "不安定" in context or "変動" in context:
-                volatility = 0.2
-            else:
-                volatility = 0.1
-
-            # 予測値を生成
-            import random
-            forecast_values = [base_value + trend * i + random.uniform(-volatility, volatility) * base_value for i in range(horizon)]
-
-            # 信頼区間を生成
-            lower_95 = [v - abs(v) * 0.15 for v in forecast_values]
-            upper_95 = [v + abs(v) * 0.15 for v in forecast_values]
+            # メトリクスを取得
+            metrics = forecast_result.metrics
 
             # メタデータを生成
             metadata = {
                 'model_name': self.model_name,
                 'model_type': 'zero_shot',
                 'context': context,
-                'confidence_intervals': {
-                    'lower_95': lower_95,
-                    'upper_95': upper_95
-                },
-                'metrics': {
-                    'confidence': 0.7,  # ゼロショット予測の信頼度
-                }
+                'confidence_intervals': confidence_intervals,
+                'metrics': metrics
             }
 
-            logger.info(f"ダミー実装によるゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
+            logger.info(f"chronos-boltによるゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
 
             return forecast_timestamps, forecast_values, metadata
 

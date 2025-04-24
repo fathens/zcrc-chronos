@@ -187,6 +187,8 @@ class TimeSeriesPredictor:
     def zero_shot_predict(self, context: str, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluonを使用したゼロショット予測を実行
+        chronos-boltライブラリのZeroShotPredictorクラスは内部でAutoGluonを使用して
+        テキストコンテキストに基づく予測を行います。
 
         Args:
             context: 予測のためのコンテキスト情報（テキスト）
@@ -218,10 +220,17 @@ class TimeSeriesPredictor:
             # モデルパラメータの設定
             model_params = {**self.config['default_model']['chronos'], **self.model_params} if self.model_params else self.config['default_model']['chronos']
 
+            # AutoGluon固有のパラメータを設定
+            if 'autogluon_params' in self.config['default_model']['chronos']:
+                autogluon_params = self.config['default_model']['chronos']['autogluon_params']
+                model_params['autogluon_params'] = autogluon_params
+                logger.info(f"AutoGluon固有のパラメータを設定: {autogluon_params}")
+
             # chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行
             logger.info("chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行します")
 
             # AutoGluonゼロショット予測モデルの初期化
+            # ZeroShotPredictorクラスは内部でAutoGluonを使用してテキストコンテキストに基づく予測を行う
             zero_shot_model = chronos_bolt.ZeroShotPredictor(model_params)
 
             # コンテキスト情報を使用して予測を実行
@@ -242,7 +251,7 @@ class TimeSeriesPredictor:
             # メタデータを生成
             metadata = {
                 'model_name': self.model_name,
-                'model_type': 'autogluon_zero_shot',
+                'model_type': 'autogluon_zero_shot',  # AutoGluonを使用したゼロショット予測であることを示す
                 'context': context,
                 'confidence_intervals': confidence_intervals,
                 'metrics': metrics

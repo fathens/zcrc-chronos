@@ -7,7 +7,7 @@ dependencies:
   - pip
   - pip:
     # Core dependencies
-    - chronos-bolt>=1.5.1  # 時系列予測ライブラリ
+    - autogluon.timeseries>=1.2.0  # Chronos-Bolt を含む時系列予測ライブラリ
     - fastapi>=0.95.0      # APIフレームワーク
     - uvicorn>=0.21.0      # ASGIサーバー
     - pydantic>=2.0.0      # データバリデーション

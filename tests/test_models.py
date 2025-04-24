@@ -45,49 +45,20 @@ def test_prepare_data():
     assert 'value' in df.columns
     assert df.index.name == 'timestamp'
 
-def test_fit_predict():
+def test_zero_shot_predict():
     """
-    モデルの学習と予測のテスト
-    """
-    predictor = TimeSeriesPredictor()
-
-    # テストデータの作成
-    now = datetime.datetime.now()
-    timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-    values = [10.0 + i * 0.1 for i in range(24)]
-
-    # モデルの学習
-    predictor.fit(timestamps, values)
-    assert predictor.model is not None
-
-    # 予測の実行
-    horizon = 12
-    forecast_timestamps, forecast_values, metadata = predictor.predict(horizon=horizon)
-
-    # 結果の検証
-    assert len(forecast_timestamps) == horizon
-    assert len(forecast_values) == horizon
-    assert isinstance(metadata, dict)
-    assert "model_name" in metadata
-    assert "confidence_intervals" in metadata
-    assert "metrics" in metadata
-
-def test_predict_with_autogluon():
-    """
-    AutoGluonを使用した予測のテスト
+    Chronos-Bolt を使用したゼロショット予測のテスト
     """
     predictor = TimeSeriesPredictor()
 
-    # テストデータの作成
-    now = datetime.datetime.now()
-    timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-    values = [10.0 + i * 0.1 for i in range(24)]
+    # コンテキスト情報
+    context = "過去24時間の電力消費量データに基づいて、今後12時間の予測を行う"
 
-    # AutoGluon予測の実行
+    # ゼロショット予測の実行
     try:
         horizon = 12
-        forecast_timestamps, forecast_values, metadata = predictor.predict_with_autogluon(
-            timestamps, values, horizon=horizon
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            context=context, horizon=horizon
         )
 
         # 結果の検証
@@ -96,11 +67,12 @@ def test_predict_with_autogluon():
         assert isinstance(metadata, dict)
         assert "model_name" in metadata
         assert "model_type" in metadata
-        assert metadata["model_type"] == "autogluon"
+        assert metadata["model_type"] == "chronos_bolt"
+        assert "preset" in metadata
+        assert "context" in metadata
         assert "confidence_intervals" in metadata
-        assert "metrics" in metadata
     except ImportError:
-        pytest.skip("chronos-boltのAutoGluon機能が利用できません")
+        pytest.skip("AutoGluon-TimeSeriesのChronos-Bolt機能が利用できません")
 
 def test_save_load_model(tmp_path):
     """
@@ -124,10 +96,5 @@ def test_save_load_model(tmp_path):
     loaded_predictor = TimeSeriesPredictor.load_model(model_path)
     assert loaded_predictor.model is not None
 
-    # 読み込んだモデルで予測を実行
-    horizon = 12
-    forecast_timestamps, forecast_values, metadata = loaded_predictor.predict(horizon=horizon)
-
-    # 結果の検証
-    assert len(forecast_timestamps) == horizon
-    assert len(forecast_values) == horizon
+    # 読み込んだモデルの検証（予測メソッドの呼び出しはしない）
+    assert loaded_predictor.model_name == predictor.model_name

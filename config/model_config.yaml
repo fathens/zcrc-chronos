@@ -12,6 +12,9 @@ default_model:
     forecast_horizon: 24   # 予測期間（時間単位）
     frequency: "H"         # 'H'（時間）, 'D'（日）, 'W'（週）など
     seasonality_mode: "multiplicative"
+    bolt_size: "base"      # "tiny", "mini", "small", "base" から選択
+    eval_metric: "mean_absolute_error"
+    verbosity: 2
 
     # Prophetモデル固有のパラメータ
     prophet_params:

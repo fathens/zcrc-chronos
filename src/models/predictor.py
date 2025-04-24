@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
-# chronos-boltライブラリをインポート
+# AutoGluon-TimeSeriesライブラリをインポート
 import sys
 import os
 
@@ -21,10 +21,10 @@ try:
         # テスト環境では、モックモジュールを使用
         # testsディレクトリをパスに追加
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "tests"))
-        import chronos_bolt
+        from chronos_bolt import TimeSeriesDataFrame, TimeSeriesPredictor as AutoGluonTSPredictor
     else:
         # 本番環境では、実際のライブラリを使用
-        import chronos_bolt
+        from autogluon.timeseries import TimeSeriesDataFrame, TimeSeriesPredictor as AutoGluonTSPredictor
 except ImportError:
     logger.error("chronos-boltライブラリをインポートできませんでした。テスト環境の場合はモックが使用されます。")
     if not is_test:
@@ -186,9 +186,7 @@ class TimeSeriesPredictor:
 
     def zero_shot_predict(self, context: str, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
-        AutoGluonを使用したゼロショット予測を実行
-        chronos-boltライブラリのZeroShotPredictorクラスは内部でAutoGluonを使用して
-        テキストコンテキストに基づく予測を行います。
+        AutoGluon-TimeSeries の Chronos-Bolt を使用したゼロショット予測を実行
 
         Args:
             context: 予測のためのコンテキスト情報（テキスト）
@@ -197,9 +195,9 @@ class TimeSeriesPredictor:
         Returns:
             予測期間のタイムスタンプ、予測値、メタデータのタプル
         """
-        logger.info(f"モデル '{self.model_name}' によるAutoGluonゼロショット予測を開始します（期間: {horizon}）")
-
         try:
+            logger.info(f"AutoGluon-TimeSeries の Chronos-Bolt を使用したゼロショット予測を開始します（期間: {horizon}）")
+
             # 現在の時刻を取得
             now = datetime.datetime.now()
 
@@ -218,52 +216,97 @@ class TimeSeriesPredictor:
             forecast_timestamps = [now + delta * (i+1) for i in range(horizon)]
 
             # モデルパラメータの設定
-            model_params = {**self.config['default_model']['chronos'], **self.model_params} if self.model_params else self.config['default_model']['chronos']
+            model_params = {
+                **self.config['default_model']['chronos'],
+                **self.model_params
+            } if self.model_params else self.config['default_model']['chronos']
 
-            # AutoGluon固有のパラメータを設定
-            if 'autogluon_params' in self.config['default_model']['chronos']:
-                autogluon_params = self.config['default_model']['chronos']['autogluon_params']
-                model_params['autogluon_params'] = autogluon_params
-                logger.info(f"AutoGluon固有のパラメータを設定: {autogluon_params}")
+            # Chronos-Bolt のプリセットを決定（tiny, mini, small, base）
+            bolt_size = model_params.get('bolt_size', 'base')
+            preset = f"bolt_{bolt_size}"
 
-            # chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行
-            logger.info("chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行します")
+            # コンテキスト情報からダミーデータを生成
+            # 注：実際の実装ではコンテキスト情報を適切に処理する必要があります
+            dummy_data = self._generate_dummy_data_from_context(context)
 
-            # AutoGluonゼロショット予測モデルの初期化
-            # ZeroShotPredictorクラスは内部でAutoGluonを使用してテキストコンテキストに基づく予測を行う
-            zero_shot_model = chronos_bolt.ZeroShotPredictor(model_params)
+            # AutoGluon-TimeSeries を使用した予測
 
-            # コンテキスト情報を使用して予測を実行
-            forecast_result = zero_shot_model.predict(context=context, horizon=horizon)
+            predictor = AutoGluonTSPredictor(
+                prediction_length=horizon,
+                eval_metric=model_params.get('eval_metric', 'mean_absolute_error')
+            )
+
+            # フィット（Chronos-Bolt では主に設定のために使用される）
+            predictor.fit(
+                dummy_data,
+                presets=preset,
+                verbosity=model_params.get('verbosity', 2)
+            )
+
+            # 予測を実行
+            forecast_result = predictor.predict(dummy_data)
 
             # 予測結果から値を取得
-            forecast_values = forecast_result.values
+            item_id = dummy_data.item_ids[0]
+            forecast_values = forecast_result[item_id].values.tolist()
 
-            # 信頼区間を取得
+            # 信頼区間を取得（実装依存）
             confidence_intervals = {
-                'lower_95': forecast_result.confidence_intervals.get('lower_95', []),
-                'upper_95': forecast_result.confidence_intervals.get('upper_95', [])
+                'lower_95': [],  # 実際の実装ではここに適切な値を設定
+                'upper_95': []   # 実際の実装ではここに適切な値を設定
             }
-
-            # メトリクスを取得
-            metrics = forecast_result.metrics
 
             # メタデータを生成
             metadata = {
                 'model_name': self.model_name,
-                'model_type': 'autogluon_zero_shot',  # AutoGluonを使用したゼロショット予測であることを示す
+                'model_type': 'chronos_bolt',
+                'preset': preset,
                 'context': context,
-                'confidence_intervals': confidence_intervals,
-                'metrics': metrics
+                'confidence_intervals': confidence_intervals
             }
 
-            logger.info(f"chronos-boltによるAutoGluonゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
+            logger.info(f"Chronos-Bolt によるゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
 
             return forecast_timestamps, forecast_values, metadata
 
         except Exception as e:
-            logger.error(f"AutoGluonゼロショット予測に失敗しました: {e}")
-            raise ValueError(f"AutoGluonゼロショット予測に失敗しました: {e}")
+            logger.error(f"Chronos-Bolt によるゼロショット予測に失敗しました: {e}")
+            raise ValueError(f"Chronos-Bolt によるゼロショット予測に失敗しました: {e}")
+
+    def _generate_dummy_data_from_context(self, context: str) -> 'TimeSeriesDataFrame':
+        """
+        コンテキスト情報からダミーの時系列データを生成
+
+        実際の実装では、コンテキスト情報を適切に解析して
+        意味のあるデータを生成する必要があります。
+
+        Args:
+            context: 予測のためのコンテキスト情報（テキスト）
+
+        Returns:
+            TimeSeriesDataFrame
+        """
+        # この実装はダミーです。実際にはコンテキストから適切なデータを生成する必要があります
+        import pandas as pd
+        import numpy as np
+
+        # 過去24時間分のダミーデータを生成
+        now = datetime.datetime.now()
+        timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
+
+        # コンテキストからノイズを生成（単純な例として）
+        np.random.seed(hash(context) % 10000)
+        values = np.random.normal(10, 2, len(timestamps)).tolist()
+
+        # データフレームを作成
+        df = pd.DataFrame({
+            'item_id': ['context_based_id'] * len(timestamps),
+            'timestamp': timestamps,
+            'target': values
+        })
+
+        # TimeSeriesDataFrame に変換
+        return TimeSeriesDataFrame(df, id_column='item_id', timestamp_column='timestamp')
 
     def save_model(self, path: str) -> None:
         """

@@ -183,122 +183,10 @@ class TimeSeriesPredictor:
             logger.error(f"モデルの学習に失敗しました: {e}")
             raise ValueError(f"モデルの学習に失敗しました: {e}")
 
-    def predict(self, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
-        """
-        予測を実行
-
-        Args:
-            horizon: 予測期間
-
-        Returns:
-            予測期間のタイムスタンプ、予測値、メタデータのタプル
-        """
-        # 実際の実装では、chronos-boltライブラリを使用して予測を実行
-        # ここではダミー実装
-        if self.model is None:
-            raise ValueError("モデルが学習されていません。先にfit()メソッドを呼び出してください。")
-
-        logger.info(f"モデル '{self.model_name}' による予測を開始します（期間: {horizon}）")
-
-        try:
-            # ダミー予測の生成
-            last_timestamp = self.model['data'].index[-1]
-            frequency = self.model['params'].get('frequency', 'H')
-
-            # 頻度に基づいて時間間隔を設定
-            if frequency == 'H':
-                delta = datetime.timedelta(hours=1)
-            elif frequency == 'D':
-                delta = datetime.timedelta(days=1)
-            elif frequency == 'W':
-                delta = datetime.timedelta(weeks=1)
-            else:
-                delta = datetime.timedelta(hours=1)
-
-            # 予測期間のタイムスタンプを生成
-            forecast_timestamps = [last_timestamp + delta * (i+1) for i in range(horizon)]
-
-            # 最後の値を取得
-            last_value = self.model['data']['value'].iloc[-1]
-
-            # ダミーの予測値を生成（ランダムな変動を加える）
-            import random
-            forecast_values = [last_value + random.uniform(-0.1, 0.1) * (i+1) for i in range(horizon)]
-
-            # 正規化されている場合は元のスケールに戻す
-            forecast_values = self._inverse_transform(forecast_values)
-
-            # 信頼区間を生成
-            lower_95 = [v - abs(v) * 0.1 for v in forecast_values]
-            upper_95 = [v + abs(v) * 0.1 for v in forecast_values]
-
-            # メタデータを生成
-            metadata = {
-                'model_name': self.model_name,
-                'confidence_intervals': {
-                    'lower_95': lower_95,
-                    'upper_95': upper_95
-                },
-                'metrics': {
-                    'mse': 0.15,
-                    'mae': 0.12
-                }
-            }
-
-            logger.info(f"予測が完了しました（{len(forecast_values)}ポイント）")
-
-            return forecast_timestamps, forecast_values, metadata
-
-        except Exception as e:
-            logger.error(f"予測に失敗しました: {e}")
-            raise ValueError(f"予測に失敗しました: {e}")
-
-    def predict_with_autogluon(self, timestamps: List[datetime.datetime], values: List[float], horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
-        """
-        AutoGluon を使用した予測を実行
-
-        Args:
-            timestamps: タイムスタンプのリスト
-            values: 値のリスト
-            horizon: 予測期間
-
-        Returns:
-            予測期間のタイムスタンプ、予測値、メタデータのタプル
-        """
-        logger.info(f"AutoGluon を使用した予測を開始します（期間: {horizon}）")
-
-        try:
-            # データの準備
-            df = self._prepare_data(timestamps, values)
-
-            # モデルパラメータの設定
-            model_params = {**self.config['default_model']['chronos'], **self.model_params} if self.model_params else self.config['default_model']['chronos']
-
-            # chronos-bolt の AutoGluon 予測機能を使用
-            predictor = chronos_bolt.AutoGluonPredictor(model_params)
-            forecast_result = predictor.predict(df, horizon=horizon)
-
-            # 予測結果の処理
-            forecast_timestamps = [timestamps[-1] + datetime.timedelta(hours=i+1) for i in range(horizon)]
-            forecast_values = forecast_result.values
-
-            # メタデータの作成
-            metadata = {
-                'model_name': self.model_name,
-                'model_type': 'autogluon',
-                'confidence_intervals': forecast_result.confidence_intervals,
-                'metrics': forecast_result.metrics
-            }
-
-            return forecast_timestamps, forecast_values, metadata
-
-        except Exception as e:
-            logger.error(f"AutoGluon による予測に失敗しました: {e}")
-            raise ValueError(f"AutoGluon による予測に失敗しました: {e}")
 
     def zero_shot_predict(self, context: str, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
-        ゼロショット予測を実行
+        AutoGluonを使用したゼロショット予測を実行
 
         Args:
             context: 予測のためのコンテキスト情報（テキスト）
@@ -307,7 +195,7 @@ class TimeSeriesPredictor:
         Returns:
             予測期間のタイムスタンプ、予測値、メタデータのタプル
         """
-        logger.info(f"モデル '{self.model_name}' によるゼロショット予測を開始します（期間: {horizon}）")
+        logger.info(f"モデル '{self.model_name}' によるAutoGluonゼロショット予測を開始します（期間: {horizon}）")
 
         try:
             # 現在の時刻を取得
@@ -330,10 +218,10 @@ class TimeSeriesPredictor:
             # モデルパラメータの設定
             model_params = {**self.config['default_model']['chronos'], **self.model_params} if self.model_params else self.config['default_model']['chronos']
 
-            # chronos-boltライブラリを使用してゼロショット予測を実行
-            logger.info("chronos-boltライブラリを使用してゼロショット予測を実行します")
+            # chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行
+            logger.info("chronos-boltライブラリを使用してAutoGluonゼロショット予測を実行します")
 
-            # ゼロショット予測モデルの初期化
+            # AutoGluonゼロショット予測モデルの初期化
             zero_shot_model = chronos_bolt.ZeroShotPredictor(model_params)
 
             # コンテキスト情報を使用して予測を実行
@@ -354,19 +242,19 @@ class TimeSeriesPredictor:
             # メタデータを生成
             metadata = {
                 'model_name': self.model_name,
-                'model_type': 'zero_shot',
+                'model_type': 'autogluon_zero_shot',
                 'context': context,
                 'confidence_intervals': confidence_intervals,
                 'metrics': metrics
             }
 
-            logger.info(f"chronos-boltによるゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
+            logger.info(f"chronos-boltによるAutoGluonゼロショット予測が完了しました（{len(forecast_values)}ポイント）")
 
             return forecast_timestamps, forecast_values, metadata
 
         except Exception as e:
-            logger.error(f"ゼロショット予測に失敗しました: {e}")
-            raise ValueError(f"ゼロショット予測に失敗しました: {e}")
+            logger.error(f"AutoGluonゼロショット予測に失敗しました: {e}")
+            raise ValueError(f"AutoGluonゼロショット予測に失敗しました: {e}")
 
     def save_model(self, path: str) -> None:
         """

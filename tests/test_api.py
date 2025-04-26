@@ -56,8 +56,15 @@ def test_zero_shot_predict_endpoint():
     ゼロショット予測エンドポイントのテスト
     """
     # テスト用のリクエストデータ
+    import datetime
+    now = datetime.datetime.now()
+    # 過去24時間分のダミー時系列データを生成
+    timestamps = [(now - datetime.timedelta(hours=i)).isoformat() for i in range(24, 0, -1)]
+    values = [10.0 + i * 0.1 for i in range(24)]
+    
     request_data = {
-        "context": "今後の株価は上昇傾向にあり、安定した成長が見込まれる。",
+        "timestamp": timestamps,
+        "values": values,
         "horizon": 12,
         "model_name": "chronos_default"
     }
@@ -77,14 +84,19 @@ def test_zero_shot_predict_endpoint():
     assert len(data["forecast_timestamp"]) == request_data["horizon"]
     assert len(data["forecast_values"]) == request_data["horizon"]
 
-    # コンテキストの検証は削除（PredictionResponseにはcontextフィールドがないため）
-
 def test_zero_shot_predict_endpoint_invalid_data():
     """
     ゼロショット予測エンドポイントの無効なデータに対するテスト
     """
-    # contextが欠けている無効なデータ
+    # timestampとvaluesの長さが一致しない無効なデータ
+    import datetime
+    now = datetime.datetime.now()
+    timestamps = [(now - datetime.timedelta(hours=i)).isoformat() for i in range(5, 0, -1)]
+    values = [10.0, 11.0, 12.0]  # 長さが一致しない
+    
     invalid_data = {
+        "timestamp": timestamps,
+        "values": values,
         "horizon": 12,
         "model_name": "chronos_default"
     }
@@ -92,4 +104,3 @@ def test_zero_shot_predict_endpoint_invalid_data():
     response = client.post("/api/v1/predict_zero_shot", json=invalid_data)
     # バリデーションエラーが発生することを期待
     assert response.status_code == 422
-

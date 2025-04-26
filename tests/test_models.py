@@ -51,14 +51,18 @@ def test_zero_shot_predict():
     """
     predictor = TimeSeriesPredictor()
 
-    # コンテキスト情報
-    context = "過去24時間の電力消費量データに基づいて、今後12時間の予測を行う"
+    # 時系列データの作成
+    import datetime
+    now = datetime.datetime.now()
+    # 過去24時間分のダミー時系列データを生成
+    timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
+    values = [10.0 + i * 0.1 for i in range(24)]
 
     # ゼロショット予測の実行
     try:
         horizon = 12
         forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
-            context=context, horizon=horizon
+            timestamp=timestamps, values=values, horizon=horizon
         )
 
         # 結果の検証
@@ -69,7 +73,8 @@ def test_zero_shot_predict():
         assert "model_type" in metadata
         assert metadata["model_type"] == "chronos_bolt"
         assert "preset" in metadata
-        assert "context" in metadata
+        assert "training_samples" in metadata
+        assert metadata["training_samples"] == len(values)
         assert "confidence_intervals" in metadata
     except ImportError:
         pytest.skip("AutoGluon-TimeSeriesのChronos-Bolt機能が利用できません")

@@ -184,12 +184,13 @@ class TimeSeriesPredictor:
             raise ValueError(f"モデルの学習に失敗しました: {e}")
 
 
-    def zero_shot_predict(self, context: str, horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
+    def zero_shot_predict(self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries の Chronos-Bolt を使用したゼロショット予測を実行
 
         Args:
-            context: 予測のためのコンテキスト情報（テキスト）
+            timestamp: 時系列データのタイムスタンプ
+            values: 時系列データの値
             horizon: 予測期間
 
         Returns:
@@ -198,8 +199,8 @@ class TimeSeriesPredictor:
         try:
             logger.info(f"AutoGluon-TimeSeries の Chronos-Bolt を使用したゼロショット予測を開始します（期間: {horizon}）")
 
-            # 現在の時刻を取得
-            now = datetime.datetime.now()
+            # 最新のタイムスタンプを取得
+            latest_timestamp = max(timestamp)
 
             # 頻度に基づいて時間間隔を設定（デフォルトは1時間）
             frequency = self.config['default_model']['chronos'].get('frequency', 'H')
@@ -213,7 +214,7 @@ class TimeSeriesPredictor:
                 delta = datetime.timedelta(hours=1)
 
             # 予測期間のタイムスタンプを生成
-            forecast_timestamps = [now + delta * (i+1) for i in range(horizon)]
+            forecast_timestamps = [latest_timestamp + delta * (i+1) for i in range(horizon)]
 
             # モデルパラメータの設定
             model_params = {
@@ -225,12 +226,15 @@ class TimeSeriesPredictor:
             bolt_size = model_params.get('bolt_size', 'base')
             preset = f"bolt_{bolt_size}"
 
-            # コンテキスト情報からダミーデータを生成
-            # 注：実際の実装ではコンテキスト情報を適切に処理する必要があります
-            dummy_data = self._generate_dummy_data_from_context(context)
+            # 実際の時系列データを使用してTimeSeriesDataFrameを作成
+            df = pd.DataFrame({
+                'item_id': ['time_series_data'] * len(timestamp),
+                'timestamp': timestamp,
+                'target': values
+            })
+            time_series_data = TimeSeriesDataFrame(df, id_column='item_id', timestamp_column='timestamp')
 
             # AutoGluon-TimeSeries を使用した予測
-
             predictor = AutoGluonTSPredictor(
                 prediction_length=horizon,
                 eval_metric=model_params.get('eval_metric', 'mean_absolute_error')
@@ -238,16 +242,16 @@ class TimeSeriesPredictor:
 
             # フィット（Chronos-Bolt では主に設定のために使用される）
             predictor.fit(
-                dummy_data,
+                time_series_data,
                 presets=preset,
                 verbosity=model_params.get('verbosity', 2)
             )
 
             # 予測を実行
-            forecast_result = predictor.predict(dummy_data)
+            forecast_result = predictor.predict(time_series_data)
 
             # 予測結果から値を取得
-            item_id = dummy_data.item_ids[0]
+            item_id = time_series_data.item_ids[0]
             forecast_values = forecast_result[item_id].values.tolist()
 
             # 信頼区間を取得（実装依存）
@@ -261,7 +265,7 @@ class TimeSeriesPredictor:
                 'model_name': self.model_name,
                 'model_type': 'chronos_bolt',
                 'preset': preset,
-                'context': context,
+                'training_samples': len(values),
                 'confidence_intervals': confidence_intervals
             }
 
@@ -272,41 +276,6 @@ class TimeSeriesPredictor:
         except Exception as e:
             logger.error(f"Chronos-Bolt によるゼロショット予測に失敗しました: {e}")
             raise ValueError(f"Chronos-Bolt によるゼロショット予測に失敗しました: {e}")
-
-    def _generate_dummy_data_from_context(self, context: str) -> 'TimeSeriesDataFrame':
-        """
-        コンテキスト情報からダミーの時系列データを生成
-
-        実際の実装では、コンテキスト情報を適切に解析して
-        意味のあるデータを生成する必要があります。
-
-        Args:
-            context: 予測のためのコンテキスト情報（テキスト）
-
-        Returns:
-            TimeSeriesDataFrame
-        """
-        # この実装はダミーです。実際にはコンテキストから適切なデータを生成する必要があります
-        import pandas as pd
-        import numpy as np
-
-        # 過去24時間分のダミーデータを生成
-        now = datetime.datetime.now()
-        timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-
-        # コンテキストからノイズを生成（単純な例として）
-        np.random.seed(hash(context) % 10000)
-        values = np.random.normal(10, 2, len(timestamps)).tolist()
-
-        # データフレームを作成
-        df = pd.DataFrame({
-            'item_id': ['context_based_id'] * len(timestamps),
-            'timestamp': timestamps,
-            'target': values
-        })
-
-        # TimeSeriesDataFrame に変換
-        return TimeSeriesDataFrame(df, id_column='item_id', timestamp_column='timestamp')
 
     def save_model(self, path: str) -> None:
         """
@@ -351,12 +320,12 @@ class TimeSeriesPredictor:
             import pandas as pd
             import numpy as np
 
-            # ダミーデータの作成
+            # ダミーの時系列データを生成
             now = datetime.datetime.now()
             timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-            values = [10.0 + i * 0.1 for i in range(24)]
+            values = np.random.normal(10, 2, len(timestamps)).tolist()
 
-            # DataFrameの作成
+            # データフレームを作成
             df = pd.DataFrame({
                 'timestamp': timestamps,
                 'value': values

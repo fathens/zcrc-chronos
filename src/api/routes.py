@@ -86,7 +86,8 @@ class PredictionResponse(BaseModel):
 
 class ZeroShotPredictionRequest(BaseModel):
     """ゼロショット予測リクエストモデル"""
-    context: str
+    timestamp: List[datetime.datetime]
+    values: List[float]
     horizon: int = 24
     frequency: Optional[str] = "H"
     model_name: Optional[str] = "chronos_default"
@@ -95,7 +96,8 @@ class ZeroShotPredictionRequest(BaseModel):
     class Config:
         schema_extra = {
             "example": {
-                "context": "今後3日間は気温が上昇し、需要が増加する見込みです。",
+                "timestamp": ["2023-01-01T00:00:00", "2023-01-01T01:00:00", "2023-01-01T02:00:00"],
+                "values": [10.5, 11.2, 10.8],
                 "horizon": 72,
                 "frequency": "H",
                 "model_name": "chronos_default",
@@ -104,6 +106,20 @@ class ZeroShotPredictionRequest(BaseModel):
                 }
             }
         }
+    
+    @field_validator('values')
+    def validate_values_length(cls, v, info):
+        """
+        valuesの長さがtimestampの長さと一致することを検証
+        """
+        # 現在のモデルのデータを取得
+        data = info.data
+
+        # timestampが存在する場合、長さを比較
+        if 'timestamp' in data and len(data['timestamp']) != len(v):
+            raise ValueError("timestampとvaluesの長さが一致しません")
+
+        return v
 
 class ModelInfo(BaseModel):
     """モデル情報モデル"""
@@ -144,7 +160,7 @@ async def get_models():
 @router.post("/predict_zero_shot", response_model=PredictionResponse, tags=["prediction"])
 async def predict_zero_shot(request: ZeroShotPredictionRequest):
     """
-    コンテキスト情報に基づくゼロショット予測を実行
+    時系列データに基づくゼロショット予測を実行
     """
     try:
         # 予測モデルの初期化
@@ -155,7 +171,8 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
 
         # ゼロショット予測の実行
         forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
-            context=request.context,
+            timestamp=request.timestamp,
+            values=request.values,
             horizon=request.horizon
         )
 

@@ -10,6 +10,46 @@ from pathlib import Path
 from unittest.mock import MagicMock
 import sys
 from types import ModuleType
+import pandas as pd
+
+# 実際のライブラリが必要かどうかを判断する環境変数
+NEED_REAL_LIBRARY = os.environ.get('NEED_REAL_LIBRARY', 'true').lower() == 'true'
+CAN_SKIP_REAL_LIBRARY = os.environ.get('CAN_SKIP_REAL_LIBRARY', 'false').lower() == 'true'
+
+def need_real_library(func):
+    """実際のライブラリが必要なテストに対するデコレータ"""
+    return pytest.mark.skipif(
+        not NEED_REAL_LIBRARY,
+        reason="実際のライブラリをテストに使用しません（NEED_REAL_LIBRARY=false）"
+    )(func)
+
+def can_skip_real_library(func):
+    """必要に応じて実際のライブラリのテストをスキップするデコレータ"""
+    return pytest.mark.skipif(
+        CAN_SKIP_REAL_LIBRARY,
+        reason="実際のライブラリのテストをスキップしています（CAN_SKIP_REAL_LIBRARY=true）"
+    )(func)
+
+# プロジェクトルートをパスに追加
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# テスト実行環境の設定
+def pytest_configure(config):
+    """テスト実行前のグローバル設定"""
+    # 常に実ライブラリを使用する場合、この設定をアクティブにする
+    # os.environ['USE_REAL_LIBRARY'] = 'true'
+    
+    # または環境変数で制御する場合（CIでモックを使いたい場合など）
+    if os.environ.get('CI') != 'true':  # CI環境でない場合
+        os.environ['USE_REAL_LIBRARY'] = 'true'
+
+def pytest_unconfigure(config):
+    """テスト実行後のクリーンアップ処理"""
+    # 環境変数をクリア
+    if 'USE_REAL_LIBRARY' in os.environ:
+        del os.environ['USE_REAL_LIBRARY']
 
 @pytest.fixture
 def test_config():

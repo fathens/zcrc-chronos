@@ -52,6 +52,9 @@ data/models/*
 !data/processed/.gitkeep
 !data/models/.gitkeep
 
+# 一時モデルデータ
+temp_model/
+
 # Logs
 logs/
 *.log
@@ -67,6 +70,9 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+
+# テストスナップショット
+tests/snapshots/
 
 # Docker
 .dockerignore

@@ -363,18 +363,49 @@ def test_zero_shot_predict_implementation_verification():
                 
                 # 平坦なデータの場合（標準偏差が小さい）
                 if stored_data['std'] < 1.0:
-                    # 平坦な予測結果を返す
+                    # 平坦な予測結果を返す (全て同じ値)
                     mock_values = np.array([stored_data['mean']] * 5)
                 else:
-                    # 上昇トレンドを継続する予測結果を返す
+                    # 上昇トレンドを継続する予測結果を返す (増加するトレンド)
                     last_value = stored_data['target_values'][-1]
                     mock_values = np.array([last_value + (i+1) * 10.0 for i in range(5)])
                 
-                # 結果オブジェクト
+                # autogluon.timeseriesライブラリの戻り値形式に合わせてモック結果を作成
                 mock_result = MagicMock()
-                mock_result.values = mock_values
+                mock_result.item_ids = [item_id]
                 
-                return {item_id: mock_result}
+                # columnsにlevels属性を追加
+                mock_columns = MagicMock()
+                mock_columns.levels = [None, ["mean", "0.1", "0.9"]]
+                mock_result.columns = mock_columns
+                
+                # モックvaluesを保存して后でlocの戻り値として使う
+                stored_mean_values = mock_values
+                
+                # locメソッドは2レベルの複合インデックスでアクセスされるMultiIndexを模倣
+                class MockLoc:
+                    def __getitem__(self, key):
+                        if isinstance(key, tuple) and len(key) == 2:
+                            idx, column = key
+                            if idx == item_id:
+                                if column == "mean":
+                                    return pd.Series(stored_mean_values)
+                                elif column == "0.1":
+                                    return pd.Series(stored_mean_values * 0.9)
+                                elif column == "0.9":
+                                    return pd.Series(stored_mean_values * 1.1)
+                        # 期待通りの値が返せなければ固定値を返す
+                        return pd.Series([0.0] * 5)
+                
+                mock_result.loc = MockLoc()
+                
+                # tolistメソッドを追加
+                def add_tolist(series):
+                    original_tolist = series.tolist
+                    return original_tolist
+                    
+                # テスト結果を直接返す（辞書形式ではない）
+                return mock_result
             
             mock_predictor.predict.side_effect = mock_predict_side_effect
             

@@ -1,0 +1,47 @@
+# pyproject.toml
+# このファイルはPythonプロジェクトの設定を定義します
+# 各ツールの役割:
+# - black: Pythonコードの自動フォーマッタ - コードスタイルを統一します
+# - isort: インポート文を自動的に整理・最適化します
+# - flake8: コード品質チェックツール - PEP8準拠とバグの可能性を検出します
+# - pytest: Pythonのテストフレームワーク - ユニットテストや結合テストを実行します
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = "E203"  # See https://github.com/PyCQA/pycodestyle/issues/373
+exclude = [
+    ".git",
+    "__pycache__",
+    "dist",
+    "build",
+    ".env",
+    ".venv",
+    "env",
+    "venv",
+]
+
+[tool.pytest]
+testpaths = ["tests"]
+python_files = "test_*.py"

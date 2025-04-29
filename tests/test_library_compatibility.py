@@ -5,6 +5,7 @@ AutoGluon.timeseriesの実際のライブラリとモックの互換性検証テ
 import datetime
 import pickle
 from pathlib import Path
+
 import numpy as np
 
 from src.models.predictor import TimeSeriesPredictor
@@ -93,37 +94,41 @@ def get_mock_output(with_patched_predictor=None):
         if pattern == "flat":
             # 平坦なデータ -> 平坦な予測 (with minimal variation to match real library)
             mean_val = sum(values) / len(values)
-            std_val = max(0.5, np.std(values)) * 0.3  # 実際のライブラリの傾向に合わせて変動を抑える
-            
+            std_val = (
+                max(0.5, np.std(values)) * 0.3
+            )  # 実際のライブラリの傾向に合わせて変動を抑える
+
             # 小さなランダム変動を加える (疑似ランダム - 毎回同じ値を返すために固定シード)
             np.random.seed(42)
             random_variations = np.random.normal(0, std_val, horizon)
             forecast_values = [mean_val + random_variations[i] for i in range(horizon)]
-            
+
         elif pattern == "uptrend":
             # 上昇トレンド -> 実際のライブラリに近い予測を行う
             # 通常、実際のライブラリは強い上昇トレンドをやや控えめに予測する傾向がある
             last_val = values[-1]
-            
+
             # 直近5点の傾きを計算し、やや減衰させる
             slope = (values[-1] - values[-5]) / 5 if len(values) >= 5 else 1.0
             damped_slope = slope * 0.8  # トレンドをやや減衰させる
-            
+
             # 小さな変動を加える
             np.random.seed(42)
             noise = np.random.normal(0, max(0.5, np.std(values) * 0.2), horizon)
-            forecast_values = [last_val + damped_slope * (i + 1) + noise[i] for i in range(horizon)]
-            
+            forecast_values = [
+                last_val + damped_slope * (i + 1) + noise[i] for i in range(horizon)
+            ]
+
         elif pattern == "seasonal":
             # 季節性データ -> 季節性パターンの継続
             # 実際のライブラリは季節性を検出し、そのパターンを予測に反映する
-            
+
             # 24時間の周期を維持しつつ、より滑らかな曲線に
             last_idx = len(values) - 1
-            
+
             # 季節性の振幅を入力データから推定
             seasonal_amplitude = np.std(values) * 0.8  # やや控えめに
-            
+
             # トレンド成分を入力データから推定
             if len(values) >= 24:
                 # 24時間前との差で日単位の増加傾向を推定
@@ -131,27 +136,28 @@ def get_mock_output(with_patched_predictor=None):
             else:
                 # データが少ない場合は控えめなトレンドを仮定
                 daily_trend = 0.2
-                
+
             forecast_values = []
             for i in range(horizon):
                 next_idx = last_idx + i + 1
                 # より滑らかな季節性曲線を生成 (サイン関数使用)
                 seasonal = seasonal_amplitude * np.sin(2 * np.pi * (next_idx % 24) / 24)
                 trend = daily_trend * (i + 1)
-                
+
                 # 小さな不規則変動を加える
                 np.random.seed(i + 42)  # 各点で異なるが再現性のある乱数
                 noise = np.random.normal(0, seasonal_amplitude * 0.1)
-                
+
                 forecast_values.append(values[-1] + seasonal + trend + noise)
         else:
             # デフォルト: 入力データの特性を反映した予測
             mean_val = np.mean(values)
             std_val = max(0.5, np.std(values) * 0.5)
-            
+
             np.random.seed(42)
             forecast_values = [
-                values[-1] + np.random.normal(0, std_val) * (i/horizon) for i in range(horizon)
+                values[-1] + np.random.normal(0, std_val) * (i / horizon)
+                for i in range(horizon)
             ]
 
         # メタデータの作成
@@ -168,7 +174,7 @@ def get_mock_output(with_patched_predictor=None):
             "forecast_values": forecast_values,
             "metadata": metadata,
         }
-    
+
     if with_patched_predictor:
         # 外部から提供されたパッチ済みのpredictorを使用
         predictor = with_patched_predictor

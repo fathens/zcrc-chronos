@@ -4,8 +4,10 @@ APIルーティングを定義するモジュール
 
 import datetime
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+import pandas as pd
 import yaml
 from fastapi import APIRouter, HTTPException
 from loguru import logger
@@ -193,6 +195,11 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
     時系列データに基づくゼロショット予測を実行
     """
     try:
+        # 時系列データの正規化
+        normalized_timestamps, normalized_values = normalize_time_series_data(
+            request.timestamp, request.values, interpolation_method="auto"
+        )
+        
         # 予測モデルの初期化
         predictor = TimeSeriesPredictor(
             model_name=request.model_name, model_params=request.model_params
@@ -200,7 +207,7 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
 
         # ゼロショット予測の実行
         forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
-            timestamp=request.timestamp, values=request.values, horizon=request.horizon
+            timestamp=normalized_timestamps, values=normalized_values, horizon=request.horizon
         )
 
         # レスポンスを作成
@@ -218,3 +225,196 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
         raise HTTPException(
             status_code=500, detail=f"ゼロショット予測処理に失敗しました: {str(e)}"
         )
+
+
+def normalize_time_series_data(
+    timestamps: List[datetime.datetime], 
+    values: List[float],
+    interpolation_method: str = "auto"
+) -> Tuple[List[datetime.datetime], List[float]]:
+    """
+    時系列データを均等な間隔に正規化する関数
+    
+    最初と最後のタイムスタンプ間の時間を、データポイントの数に基づいて
+    均等に分割し、指定された補間方法によって新しい値を計算します。
+    
+    Args:
+        timestamps: 元のタイムスタンプのリスト
+        values: 元の値のリスト
+        interpolation_method: 補間方法。以下の値が使用可能:
+            - "auto": データの特性に基づいて自動的に最適な方法を選択（デフォルト）
+            - "linear": 線形補間 - 2点間を直線で結ぶ。安定していて予測可能。
+            - "time": 時間インデックスを考慮した補間 - 不規則な時間間隔のデータに適している。
+            - "cubic": 3次スプライン補間 - より滑らかな曲線だが、オーバーシュートの可能性がある。
+            - "nearest": 最近傍補間 - 離散的な値を維持したい場合に有用。
+            - "quadratic": 2次スプライン補間 - 線形と3次の中間的な滑らかさ。
+            - "spline": スプライン補間 - より高度な滑らかさが必要な場合。
+            - "polynomial": 多項式補間 - 少数のデータ点に対して有効だが、不安定になりやすい。
+        
+    Returns:
+        正規化されたタイムスタンプと値のタプル
+    """
+    if not timestamps or not values:
+        return timestamps, values
+    
+    # 有効な補間方法のリスト
+    valid_methods = [
+        "auto", "linear", "time", "cubic", "nearest", "quadratic", 
+        "spline", "polynomial", "zero", "slinear", "akima", "pchip"
+    ]
+    
+    # 補間方法の検証
+    if interpolation_method not in valid_methods:
+        logger.warning(f"無効な補間方法: {interpolation_method}。'auto'に切り替えます。")
+        interpolation_method = "auto"
+        
+    # 自動補間方法選択
+    if interpolation_method == "auto":
+        interpolation_method = _determine_best_interpolation_method(timestamps, values)
+        logger.info(f"自動選択された補間方法: {interpolation_method}")
+        
+    # pandasのDataFrameを作成
+    df = pd.DataFrame({
+        'timestamp': timestamps,
+        'value': values
+    })
+    
+    # タイムスタンプをインデックスに設定
+    df.set_index('timestamp', inplace=True)
+    
+    # 開始時刻と終了時刻を取得
+    start_time = min(timestamps)
+    end_time = max(timestamps)
+    
+    # 全体の時間範囲を計算（秒単位）
+    total_duration = (end_time - start_time).total_seconds()
+    
+    # データポイントの数に基づいて均等な間隔を計算
+    # 少なくとも元のデータと同じポイント数を維持
+    num_points = len(timestamps)
+    
+    # 間隔を計算（秒単位）- 少なくとも1秒以上の間隔を確保
+    interval_seconds = max(1, total_duration / (num_points - 1)) if num_points > 1 else 1
+    
+    # 均等な間隔の新しい時間インデックスを作成
+    new_timestamps = []
+    current_time = start_time
+    
+    while current_time <= end_time:
+        new_timestamps.append(current_time)
+        current_time += datetime.timedelta(seconds=interval_seconds)
+    
+    # 新しいタイムスタンプ数が元のデータポイント数よりも少なくならないように調整
+    if len(new_timestamps) < num_points:
+        # 間隔を調整して、より細かい時間間隔を作成
+        adjusted_interval = total_duration / (num_points + 1)
+        new_timestamps = []
+        current_time = start_time
+        
+        while current_time <= end_time:
+            new_timestamps.append(current_time)
+            current_time += datetime.timedelta(seconds=adjusted_interval)
+    
+    # 補間方法に応じた追加パラメータの設定
+    interpolation_kwargs = {}
+    if interpolation_method in ["spline", "polynomial"]:
+        # スプラインと多項式には追加のパラメータが必要
+        interpolation_kwargs["order"] = 3  # デフォルトの次数
+    
+    # 補間方法に応じたデータの前処理
+    # 一部の方法では、データの前処理が必要になる場合がある
+    if interpolation_method == "time" and df.index.inferred_type != "datetime64":
+        # timeメソッドはdatetimeインデックスが必要
+        logger.warning("'time'補間方法はdatetimeインデックスが必要です。'linear'に切り替えます。")
+        interpolation_method = "linear"
+    
+    try:
+        # 元のデータフレームを新しいタイムスタンプで再インデックス化し、指定された方法で補間
+        resampled_df = df.reindex(new_timestamps).interpolate(
+            method=interpolation_method, **interpolation_kwargs
+        )
+        
+        # 結果を返す
+        return new_timestamps, resampled_df['value'].tolist()
+    except Exception as e:
+        # 補間に失敗した場合はエラーをログに記録し、線形補間にフォールバック
+        logger.error(f"補間方法 '{interpolation_method}' でエラーが発生しました: {e}。線形補間を使用します。")
+        resampled_df = df.reindex(new_timestamps).interpolate(method="linear")
+        return new_timestamps, resampled_df['value'].tolist()
+
+
+def _determine_best_interpolation_method(
+    timestamps: List[datetime.datetime], 
+    values: List[float]
+) -> str:
+    """
+    時系列データの特性を分析して最適な補間方法を判別する関数
+    
+    Args:
+        timestamps: タイムスタンプのリスト
+        values: 値のリスト
+        
+    Returns:
+        最適な補間方法の文字列
+    """
+    # データ点が少ない場合は線形補間が最も安全
+    if len(timestamps) <= 3:
+        return "linear"
+    
+    # 時間間隔の規則性を計算
+    time_diffs = [(timestamps[i+1] - timestamps[i]).total_seconds() 
+                 for i in range(len(timestamps)-1)]
+    time_diff_array = np.array(time_diffs)
+    
+    # 時間間隔の変動係数（標準偏差/平均）を計算
+    # 変動係数が大きいほど、時間間隔が不規則
+    time_cv = np.std(time_diff_array) / np.mean(time_diff_array) if np.mean(time_diff_array) > 0 else 0
+    
+    # 値の変動性を計算
+    values_array = np.array(values)
+    values_diff = np.diff(values_array)
+    
+    # 値の変化の急峻さを測定（変化率の標準偏差）
+    if len(values_diff) > 1:
+        value_volatility = np.std(values_diff)
+    else:
+        value_volatility = 0
+    
+    # データの滑らかさを評価（隣接点間の2次差分の平均絶対値）
+    if len(values) >= 3:
+        second_diff = np.diff(values_diff)
+        smoothness = np.mean(np.abs(second_diff)) if len(second_diff) > 0 else 0
+    else:
+        smoothness = 0
+    
+    # 外れ値の検出
+    # 四分位範囲（IQR）を用いた外れ値検出
+    q1, q3 = np.percentile(values_array, [25, 75])
+    iqr = q3 - q1
+    lower_bound = q1 - 1.5 * iqr
+    upper_bound = q3 + 1.5 * iqr
+    outliers = [x for x in values if x < lower_bound or x > upper_bound]
+    has_outliers = len(outliers) > 0
+    
+    # 判断ロジック：時間間隔の規則性に基づく選択
+    if time_cv > 0.5:  # 時間間隔が非常に不規則
+        # 時間考慮補間が最適
+        return "time"
+    
+    # 判断ロジック：データの滑らかさと変動性に基づく選択
+    if smoothness < 0.1 and value_volatility < 0.2:  # データが非常に滑らか
+        if has_outliers:
+            # 外れ値があるが滑らかなトレンドがある場合、cubic が適切
+            return "cubic"
+        else:
+            # 外れ値がなく非常に滑らかな場合、スプラインが適切
+            return "spline" if len(values) > 10 else "cubic"
+    elif value_volatility > 1.0 or has_outliers:  # 変動が大きいまたは外れ値がある
+        # 変動が大きい場合、線形補間が安定
+        return "linear"
+    elif 0.1 <= smoothness < 0.5:  # 中程度の滑らかさ
+        # 中程度の滑らかさには2次スプラインが適切
+        return "quadratic"
+    else:
+        # その他のケースでは線形補間が最も安全で予測可能
+        return "linear"

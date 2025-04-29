@@ -15,7 +15,7 @@ dependencies:
 
     # Data processing
     - pandas~=2.2.0        # データ処理
-    - numpy~=1.26.0        # 数値計算
+    - numpy~=2.1.0        # 数値計算
     - scikit-learn~=1.5.0  # 機械学習ユーティリティ
 
     # Utilities

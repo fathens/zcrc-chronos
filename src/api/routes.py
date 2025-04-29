@@ -53,8 +53,8 @@ class TimeSeriesData(BaseModel):
     timestamp: List[datetime.datetime]
     values: List[float]
 
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "timestamp": [
                     "2023-01-01T00:00:00",
@@ -64,6 +64,7 @@ class TimeSeriesData(BaseModel):
                 "values": [10.5, 11.2, 10.8],
             }
         }
+    }
 
     @field_validator("values")
     def validate_values_length(cls, v, info):
@@ -89,8 +90,8 @@ class PredictionResponse(BaseModel):
     confidence_intervals: Optional[Dict[str, List[float]]] = None
     metrics: Optional[Dict[str, float]] = None
 
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "forecast_timestamp": [
                     "2023-01-01T03:00:00",
@@ -106,6 +107,7 @@ class PredictionResponse(BaseModel):
                 "metrics": {"mse": 0.15, "mae": 0.12},
             }
         }
+    }
 
 
 class ZeroShotPredictionRequest(BaseModel):
@@ -118,8 +120,8 @@ class ZeroShotPredictionRequest(BaseModel):
     model_name: Optional[str] = "chronos_default"
     model_params: Optional[Dict[str, Any]] = None
 
-    class Config:
-        schema_extra = {
+    model_config = {
+        "json_schema_extra": {
             "example": {
                 "timestamp": [
                     "2023-01-01T00:00:00",
@@ -133,6 +135,7 @@ class ZeroShotPredictionRequest(BaseModel):
                 "model_params": {"seasonality_mode": "multiplicative"},
             }
         }
+    }
 
     @field_validator("values")
     def validate_values_length(cls, v, info):

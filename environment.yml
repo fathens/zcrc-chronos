@@ -8,22 +8,22 @@ dependencies:
   - pip:
     # Core dependencies
     - autogluon.timeseries>=1.2.0  # Chronos-Bolt を含む時系列予測ライブラリ
-    - fastapi>=0.95.0      # APIフレームワーク
-    - uvicorn>=0.21.0      # ASGIサーバー
-    - pydantic>=2.0.0      # データバリデーション
-    - pyyaml>=6.0          # YAML設定ファイル
+    - fastapi~=0.115.0      # APIフレームワーク
+    - uvicorn~=0.32.0      # ASGIサーバー
+    - pydantic~=2.11.0      # データバリデーション
+    - pyyaml~=6.0          # YAML設定ファイル
 
     # Data processing
-    - pandas>=2.0.0        # データ処理
-    - numpy>=1.24.0        # 数値計算
-    - scikit-learn>=1.2.0  # 機械学習ユーティリティ
+    - pandas~=2.2.0        # データ処理
+    - numpy~=1.26.0        # 数値計算
+    - scikit-learn~=1.5.0  # 機械学習ユーティリティ
 
     # Utilities
-    - python-dotenv>=1.0.0 # 環境変数管理
-    - loguru>=0.7.0        # ロギング
-    - pytest>=7.3.1        # テスト
-    - httpx>=0.24.0        # HTTPクライアント（テスト用）
+    - python-dotenv~=1.0.0 # 環境変数管理
+    - loguru~=0.7.0        # ロギング
+    - pytest~=8.3.0        # テスト
+    - httpx~=0.27.0        # HTTPクライアント（テスト用）
 
     # Optional dependencies
-    - matplotlib>=3.7.0    # 可視化（オプション）
-    - plotly>=5.14.0       # インタラクティブ可視化（オプション）
+    - matplotlib~=3.10.0    # 可視化（オプション）
+    - plotly~=6.0.0       # インタラクティブ可視化（オプション）

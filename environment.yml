@@ -5,6 +5,8 @@ channels:
 dependencies:
   - python=3.12
   - pip
+  - cython  # PyYAMLビルド用に追加
+  - setuptools  # ビルド環境強化のために追加
   - pip:
     # Core dependencies
     - autogluon.timeseries>=1.2.0  # Chronos-Bolt を含む時系列予測ライブラリ

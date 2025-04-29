@@ -15,6 +15,7 @@ jobs:
           python-version: '3.12'
           activate-environment: zcrc-chronos
           environment-file: environment.yml
+          miniforge-variant: Miniforge3
       - name: Install formatting tools
         shell: bash -l {0}
         run: |
@@ -42,6 +43,7 @@ jobs:
           python-version: '3.12'
           activate-environment: zcrc-chronos
           environment-file: environment.yml
+          miniforge-variant: Miniforge3
       - name: Install linting tools
         shell: bash -l {0}
         run: |
@@ -64,6 +66,7 @@ jobs:
           python-version: '3.12'
           activate-environment: zcrc-chronos
           environment-file: environment.yml
+          miniforge-variant: Miniforge3
       - name: Install test dependencies
         shell: bash -l {0}
         run: |

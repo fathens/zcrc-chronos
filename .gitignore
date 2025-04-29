@@ -71,8 +71,5 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
-# テストスナップショット
-tests/snapshots/
-
 # Docker
 .dockerignore

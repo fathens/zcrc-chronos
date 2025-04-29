@@ -374,6 +374,12 @@ def _determine_best_interpolation_method(
     values_array = np.array(values)
     values_diff = np.diff(values_array)
     
+    # すべての値が同じかどうか確認（最適化のため）
+    all_same_values = np.all(values_array == values_array[0])
+    if all_same_values:
+        # すべての値が同じ場合、linearが最も効率的
+        return "linear"
+    
     # 値の変化の急峻さを測定（変化率の標準偏差）
     if len(values_diff) > 1:
         value_volatility = np.std(values_diff)

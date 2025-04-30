@@ -3,11 +3,6 @@ name: CI
 on:
   push:
 
-# 同時実行ジョブを設定して並列処理を最適化
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   PYTHONUNBUFFERED: 1
 

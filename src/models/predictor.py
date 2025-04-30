@@ -212,8 +212,8 @@ class TimeSeriesPredictor:
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
 
         Args:
-            timestamp: 時系列データのタイムスタンプ
-            values: 時系列データの値
+            timestamp: 時系列データのタイムスタンプ（正規化済みを前提）
+            values: 時系列データの値（正規化済みを前提）
             horizon: 予測期間
 
         Returns:
@@ -227,26 +227,15 @@ class TimeSeriesPredictor:
             # 最新のタイムスタンプを取得
             latest_timestamp = max(timestamp)
 
-            # 頻度に基づいて時間間隔を設定（デフォルトは1時間）
-            frequency = self.config["default_model"]["chronos"].get("frequency", "H")
-            if frequency == "H":
-                delta = datetime.timedelta(hours=1)
-            elif frequency == "D":
-                delta = datetime.timedelta(days=1)
-            elif frequency == "W":
-                delta = datetime.timedelta(weeks=1)
-            else:
-                delta = datetime.timedelta(hours=1)
-
-            # タイムスタンプの間隔を計算
-            if len(timestamp) > 1:
+            # タイムスタンプの間隔を計算（正規化済みデータを前提）
+            if len(timestamp) >= 2:
+                # 実データから間隔を計算
                 delta = timestamp[1] - timestamp[0]
-                if delta.days >= 1:
-                    delta = datetime.timedelta(days=1)
-                elif delta.days >= 7:
-                    delta = datetime.timedelta(days=7)
-                else:
-                    delta = datetime.timedelta(hours=1)
+            else:
+                # データが1点しかない場合はエラーを発生させる
+                error_msg = "予測には少なくとも2つのデータポイントが必要です"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
             # 予測期間のタイムスタンプを生成
             forecast_timestamps = [

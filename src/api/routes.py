@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from src.models.predictor import TimeSeriesPredictor
 
@@ -115,7 +115,7 @@ class ZeroShotPredictionRequest(BaseModel):
 
     timestamp: List[datetime.datetime]
     values: List[float]
-    horizon: int = 24
+    forecast_until: datetime.datetime
     frequency: Optional[str] = "H"
     model_name: Optional[str] = "chronos_default"
     model_params: Optional[Dict[str, Any]] = None
@@ -129,7 +129,7 @@ class ZeroShotPredictionRequest(BaseModel):
                     "2023-01-01T02:00:00",
                 ],
                 "values": [10.5, 11.2, 10.8],
-                "horizon": 72,
+                "forecast_until": "2023-01-04T02:00:00",
                 "frequency": "H",
                 "model_name": "chronos_default",
                 "model_params": {"seasonality_mode": "multiplicative"},
@@ -196,12 +196,56 @@ async def get_models():
 async def predict_zero_shot(request: ZeroShotPredictionRequest):
     """
     時系列データに基づくゼロショット予測を実行
+
+    - **timestamp**: 時系列データのタイムスタンプのリスト
+    - **values**: 時系列データの値のリスト
+    - **forecast_until**: 予測したい時点（datetime形式）
+    - **frequency**: 時系列データの周波数（例: "H" = 時間単位、"D" = 日単位）
+    - **model_name**: 使用する予測モデルの名前
+    - **model_params**: モデルに渡す追加パラメータ
     """
     try:
+        logger.info(f"ゼロショット予測APIが呼び出されました")
+
         # 時系列データの正規化
         normalized_timestamps, normalized_values = normalize_time_series_data(
             request.timestamp, request.values, interpolation_method="auto"
         )
+        
+        # 最後のタイムスタンプを取得
+        latest_timestamp = max(normalized_timestamps)
+        
+        # タイムスタンプの間隔を計算
+        if len(normalized_timestamps) >= 2:
+            # 実データから間隔を計算
+            delta = normalized_timestamps[1] - normalized_timestamps[0]
+        else:
+            # データが1点しかない場合はエラーを発生させる
+            raise HTTPException(
+                status_code=400, 
+                detail="予測には少なくとも2つのデータポイントが必要です"
+            )
+        
+        # 予測期間の計算
+        time_difference = request.forecast_until - latest_timestamp
+        
+        # 時間差をdelta単位のポイント数に変換
+        if delta.total_seconds() <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail="タイムスタンプの間隔が正しくありません（間隔がゼロまたは負の値）"
+            )
+            
+        prediction_points = int(time_difference.total_seconds() / delta.total_seconds())
+        
+        # 予測ポイント数が0以下の場合はエラー
+        if prediction_points <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"予測時点が最新のデータポイント以前です。予測時点: {request.forecast_until}, 最新のデータポイント: {latest_timestamp}"
+            )
+        
+        logger.info(f"予測ポイント数: {prediction_points}, 予測時点: {request.forecast_until}")
 
         # 予測モデルの初期化
         predictor = TimeSeriesPredictor(
@@ -212,7 +256,7 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
         forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
             timestamp=normalized_timestamps,
             values=normalized_values,
-            horizon=request.horizon,
+            horizon=prediction_points,
         )
 
         # レスポンスを作成

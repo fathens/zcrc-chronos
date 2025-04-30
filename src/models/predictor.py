@@ -445,6 +445,15 @@ class TimeSeriesPredictor:
                 "preset": preset,  # テスト互換性のため追加
             }
 
+            # 必要に応じて予測値とタイムスタンプをhorizon長に切り詰める
+            if len(forecast_values) > horizon:
+                forecast_values = forecast_values[:horizon]
+                forecast_timestamps = forecast_timestamps[:horizon]
+                # 信頼区間も同様に切り詰める
+                for key in confidence_intervals:
+                    if len(confidence_intervals[key]) > horizon:
+                        confidence_intervals[key] = confidence_intervals[key][:horizon]
+
             logger.info(
                 f"AutoGluon-TimeSeries による予測が完了しました（{len(forecast_values)}ポイント）"
             )

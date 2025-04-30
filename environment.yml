@@ -13,7 +13,7 @@ dependencies:
     - fastapi~=0.115.0      # APIフレームワーク
     - uvicorn~=0.32.0      # ASGIサーバー
     - pydantic~=2.11.0      # データバリデーション
-    - pyyaml~=6.0          # YAML設定ファイル
+    - pyyaml~=6.0.1         # YAML設定ファイル (6.0.1以降を指定してCython 3互換性問題を回避)
 
     # Data processing
     - pandas~=2.2.0        # データ処理

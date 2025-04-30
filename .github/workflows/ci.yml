@@ -16,6 +16,11 @@ jobs:
           activate-environment: zcrc-chronos
           environment-file: environment.yml
           miniforge-variant: Miniforge3
+      - name: Ensure conda environment exists
+        shell: bash -l {0}
+        run: |
+          conda env list
+          conda create -n zcrc-chronos -y || echo "Environment already exists"
       - name: Install formatting tools
         shell: bash -l {0}
         run: |
@@ -44,6 +49,11 @@ jobs:
           activate-environment: zcrc-chronos
           environment-file: environment.yml
           miniforge-variant: Miniforge3
+      - name: Ensure conda environment exists
+        shell: bash -l {0}
+        run: |
+          conda env list
+          conda create -n zcrc-chronos -y || echo "Environment already exists"
       - name: Install linting tools
         shell: bash -l {0}
         run: |
@@ -67,6 +77,11 @@ jobs:
           activate-environment: zcrc-chronos
           environment-file: environment.yml
           miniforge-variant: Miniforge3
+      - name: Ensure conda environment exists
+        shell: bash -l {0}
+        run: |
+          conda env list
+          conda create -n zcrc-chronos -y || echo "Environment already exists"
       - name: Install test dependencies
         shell: bash -l {0}
         run: |

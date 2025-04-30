@@ -275,11 +275,17 @@ class TimeSeriesPredictor:
             # AutoGluon-TimeSeries の設定
             preset = model_params.get("preset", "medium_quality")
 
+            # プロセス間の競合を避けるために一意の一時ディレクトリを作成
+            import uuid
+            import tempfile
+            temp_model_dir = os.path.join(tempfile.gettempdir(), f"ag_ts_model_{uuid.uuid4().hex}")
+            os.makedirs(temp_model_dir, exist_ok=True)
+
             # AutoGluon-TimeSeries を使用した予測
             predictor = AutoGluonTSPredictor(
                 prediction_length=horizon,
                 eval_metric="MAE",  # 実ライブラリがサポートするメトリクス
-                path=os.path.join(os.getcwd(), "temp_model"),
+                path=temp_model_dir,
                 verbosity=model_params.get("verbosity", 2),
             )
 

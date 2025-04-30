@@ -16,7 +16,7 @@ dependencies:
     - pyyaml~=6.0.1         # YAML設定ファイル (6.0.1以降を指定してCython 3互換性問題を回避)
 
     # Data processing
-    - pandas~=2.2.0        # データ処理
+    - pandas~=2.2.3        # データ処理
     - numpy~=2.1.0        # 数値計算
     - scikit-learn~=1.5.0  # 機械学習ユーティリティ
 

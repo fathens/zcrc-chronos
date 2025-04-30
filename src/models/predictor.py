@@ -4,8 +4,8 @@
 
 import datetime
 import os
-
-# AutoGluon-TimeSeriesライブラリをインポート
+import tempfile
+import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -13,7 +13,7 @@ import pandas as pd
 import yaml
 from loguru import logger
 
-# 実ライブラリのみを使用
+# AutoGluon-TimeSeriesライブラリをインポート
 try:
     from autogluon.timeseries import TimeSeriesDataFrame
     from autogluon.timeseries import TimeSeriesPredictor as AutoGluonTSPredictor
@@ -276,9 +276,8 @@ class TimeSeriesPredictor:
             preset = model_params.get("preset", "medium_quality")
 
             # プロセス間の競合を避けるために一意の一時ディレクトリを作成
-            import uuid
-            import tempfile
-            temp_model_dir = os.path.join(tempfile.gettempdir(), f"ag_ts_model_{uuid.uuid4().hex}")
+            temp_dir = tempfile.gettempdir()
+            temp_model_dir = os.path.join(temp_dir, f"ag_ts_model_{uuid.uuid4().hex}")
             os.makedirs(temp_model_dir, exist_ok=True)
 
             # AutoGluon-TimeSeries を使用した予測

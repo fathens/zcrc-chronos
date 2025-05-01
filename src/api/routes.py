@@ -111,12 +111,51 @@ class PredictionResponse(BaseModel):
 
 
 class ZeroShotPredictionRequest(BaseModel):
-    """ゼロショット予測リクエストモデル"""
-
+    """ゼロショット予測リクエストモデル
+    
+    時系列データに基づいて将来の予測を行うためのリクエストモデルです。
+    このモデルは履歴データと予測設定を含みます。
+    
+    Attributes:
+        timestamp (List[datetime.datetime]): 
+            時系列データの時間情報を表すタイムスタンプのリスト。
+            各値に対応する時間点を示します。
+            
+        values (List[float]): 
+            時系列データの実測値のリスト。
+            timestampリストと同じ長さである必要があります。
+            
+        forecast_until (datetime.datetime): 
+            予測を行う終了時点。
+            この時点までの将来値が予測されます。
+            
+        model_name (Optional[str]): 
+            予測に使用するモデルの名前。デフォルトは "chronos_default"。
+            利用可能なモデルは GET /models エンドポイントで確認できます。
+            
+        model_params (Optional[Dict[str, Any]]): 
+            モデルに渡す追加パラメータ。モデルごとに異なるパラメータをサポート。
+            例: {"seasonality_mode": "multiplicative"} - 季節性の扱い方を指定
+                {"growth": "linear"} - トレンドの成長タイプを指定
+    
+    Example:
+        ```json
+        {
+            "timestamp": [
+                "2023-01-01T00:00:00",
+                "2023-01-01T01:00:00",
+                "2023-01-01T02:00:00"
+            ],
+            "values": [10.5, 11.2, 10.8],
+            "forecast_until": "2023-01-04T02:00:00",
+            "model_name": "chronos_default",
+            "model_params": {"seasonality_mode": "multiplicative"}
+        }
+        ```
+    """
     timestamp: List[datetime.datetime]
     values: List[float]
     forecast_until: datetime.datetime
-    frequency: Optional[str] = "H"
     model_name: Optional[str] = "chronos_default"
     model_params: Optional[Dict[str, Any]] = None
 
@@ -130,7 +169,6 @@ class ZeroShotPredictionRequest(BaseModel):
                 ],
                 "values": [10.5, 11.2, 10.8],
                 "forecast_until": "2023-01-04T02:00:00",
-                "frequency": "H",
                 "model_name": "chronos_default",
                 "model_params": {"seasonality_mode": "multiplicative"},
             }
@@ -198,7 +236,6 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
     - **timestamp**: 時系列データのタイムスタンプのリスト
     - **values**: 時系列データの値のリスト
     - **forecast_until**: 予測したい時点（datetime形式）
-    - **frequency**: 時系列データの周波数（例: "H" = 時間単位、"D" = 日単位）
     - **model_name**: 使用する予測モデルの名前
     - **model_params**: モデルに渡す追加パラメータ
     """

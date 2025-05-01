@@ -82,7 +82,55 @@ class TimeSeriesData(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """予測レスポンスモデル"""
+    """予測レスポンスモデル
+
+    時系列予測の結果を格納するレスポンスモデルです。
+    予測値、使用したモデル、信頼区間、評価指標などを含みます。
+
+    Attributes:
+        forecast_timestamp (List[datetime.datetime]):
+            予測された将来の時間点のリスト。
+            予測開始時点から予測終了時点までの時間系列を表します。
+
+        forecast_values (List[float]):
+            予測値のリスト。
+            forecast_timestampの各時点に対応する予測された値です。
+
+        model_name (str):
+            予測に使用されたモデルの名前。
+            どのモデルで予測が行われたかを識別します。
+
+        confidence_intervals (Optional[Dict[str, List[float]]]):
+            予測の信頼区間。辞書形式で提供され、キーは信頼区間の種類（例: "lower_95", "upper_95"）、
+            値は予測値ごとの信頼限界値のリストです。
+            例: {"lower_95": [10.5, 10.8, 11.0], "upper_95": [11.3, 11.8, 12.4]}
+
+        metrics (Optional[Dict[str, float]]):
+            予測性能の評価指標。辞書形式で提供され、キーは指標の名前、値はその数値です。
+            一般的な指標:
+            - "mse": 平均二乗誤差 - 予測値と実測値の差の二乗の平均
+            - "mae": 平均絶対誤差 - 予測値と実測値の絶対差の平均
+            - "rmse": 二乗平均平方根誤差 - MSEの平方根
+            - "mape": 平均絶対パーセント誤差 - 相対誤差の平均（%）
+
+    Example:
+        ```json
+        {
+            "forecast_timestamp": [
+                "2023-01-01T03:00:00",
+                "2023-01-01T04:00:00",
+                "2023-01-01T05:00:00"
+            ],
+            "forecast_values": [10.9, 11.3, 11.7],
+            "model_name": "chronos_default",
+            "confidence_intervals": {
+                "lower_95": [10.5, 10.8, 11.0],
+                "upper_95": [11.3, 11.8, 12.4]
+            },
+            "metrics": {"mse": 0.15, "mae": 0.12}
+        }
+        ```
+    """
 
     forecast_timestamp: List[datetime.datetime]
     forecast_values: List[float]
@@ -234,11 +282,56 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
     """
     時系列データに基づくゼロショット予測を実行
 
-    - **timestamp**: 時系列データのタイムスタンプのリスト
-    - **values**: 時系列データの値のリスト
-    - **forecast_until**: 予測したい時点（datetime形式）
-    - **model_name**: 使用する予測モデルの名前
-    - **model_params**: モデルに渡す追加パラメータ
+    過去の時系列データから将来の値を予測するAPIエンドポイントです。
+    「ゼロショット」とは、追加の訓練なしで予測を行うことを意味します。
+
+    Parameters:
+        request (ZeroShotPredictionRequest): 予測リクエスト
+            - **timestamp**: 時系列データのタイムスタンプのリスト
+              過去の時系列データの時間情報を示します。日時形式（ISO 8601）で指定。
+
+            - **values**: 時系列データの値のリスト
+              timestampに対応する観測値または実測値。数値の配列で指定。
+
+            - **forecast_until**: 予測したい時点（datetime形式）
+              この時点までの将来値が予測されます。最後のタイムスタンプより未来の日時を指定。
+
+            - **model_name**: 使用する予測モデルの名前（オプション、デフォルト: "chronos_default"）
+              利用可能なモデルは GET /models エンドポイントで確認できます。
+
+            - **model_params**: モデルに渡す追加パラメータ（オプション）
+              モデル固有のパラメータを辞書形式で指定できます。
+
+    Returns:
+        PredictionResponse: 予測結果
+            - **forecast_timestamp**: 予測された将来時点のリスト
+            - **forecast_values**: 予測値のリスト
+            - **model_name**: 使用されたモデル名
+            - **confidence_intervals**: 信頼区間（提供されている場合）
+            - **metrics**: 予測性能の評価指標（提供されている場合）
+
+    Raises:
+        HTTPException (400): 以下の場合にエラーを返します
+            - データポイントが2点未満の場合
+            - タイムスタンプの間隔が不正（ゼロまたは負の値）の場合
+            - 予測時点が最新のデータポイント以前の場合
+        HTTPException (500): 予測処理中に内部エラーが発生した場合
+
+    Example:
+        ```bash
+        curl -X 'POST' \\
+          'http://localhost:8000/api/v1/predict_zero_shot' \\
+          -H 'Content-Type: application/json' \\
+          -d '{
+            "timestamp": [
+              "2023-01-01T00:00:00",
+              "2023-01-01T01:00:00"
+            ],
+            "values": [10.5, 11.2],
+            "forecast_until": "2023-01-04T02:00:00",
+            "model_name": "chronos_default"
+        }'
+        ```
     """
     try:
         logger.info("ゼロショット予測APIが呼び出されました")

@@ -112,32 +112,32 @@ class PredictionResponse(BaseModel):
 
 class ZeroShotPredictionRequest(BaseModel):
     """ゼロショット予測リクエストモデル
-    
+
     時系列データに基づいて将来の予測を行うためのリクエストモデルです。
     このモデルは履歴データと予測設定を含みます。
-    
+
     Attributes:
-        timestamp (List[datetime.datetime]): 
+        timestamp (List[datetime.datetime]):
             時系列データの時間情報を表すタイムスタンプのリスト。
             各値に対応する時間点を示します。
-            
-        values (List[float]): 
+
+        values (List[float]):
             時系列データの実測値のリスト。
             timestampリストと同じ長さである必要があります。
-            
-        forecast_until (datetime.datetime): 
+
+        forecast_until (datetime.datetime):
             予測を行う終了時点。
             この時点までの将来値が予測されます。
-            
-        model_name (Optional[str]): 
+
+        model_name (Optional[str]):
             予測に使用するモデルの名前。デフォルトは "chronos_default"。
             利用可能なモデルは GET /models エンドポイントで確認できます。
-            
-        model_params (Optional[Dict[str, Any]]): 
+
+        model_params (Optional[Dict[str, Any]]):
             モデルに渡す追加パラメータ。モデルごとに異なるパラメータをサポート。
             例: {"seasonality_mode": "multiplicative"} - 季節性の扱い方を指定
                 {"growth": "linear"} - トレンドの成長タイプを指定
-    
+
     Example:
         ```json
         {
@@ -153,6 +153,7 @@ class ZeroShotPredictionRequest(BaseModel):
         }
         ```
     """
+
     timestamp: List[datetime.datetime]
     values: List[float]
     forecast_until: datetime.datetime

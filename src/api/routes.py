@@ -11,7 +11,7 @@ import pandas as pd
 import yaml
 from fastapi import APIRouter, HTTPException
 from loguru import logger
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 from src.models.predictor import TimeSeriesPredictor
 
@@ -34,7 +34,7 @@ def load_config():
         with open(CONFIG_PATH, "r") as f:
             return yaml.safe_load(f)
     except Exception as e:
-        logger.error(f"設定ファイルの読み込みに失敗しました: {e}")
+        logger.error("設定ファイルの読み込みに失敗しました: " + str(e))
         raise HTTPException(
             status_code=500, detail="サーバー設定の読み込みに失敗しました"
         )
@@ -185,14 +185,12 @@ async def get_models():
 
         return models
     except Exception as e:
-        logger.error(f"モデル情報の取得に失敗しました: {e}")
+        logger.error("モデル情報の取得に失敗しました: " + str(e))
         raise HTTPException(status_code=500, detail="モデル情報の取得に失敗しました")
 
 
 # ゼロショット予測エンドポイント
-@router.post(
-    "/predict_zero_shot", response_model=PredictionResponse, tags=["prediction"]
-)
+@router.post("/predict_zero_shot", response_model=PredictionResponse)
 async def predict_zero_shot(request: ZeroShotPredictionRequest):
     """
     時系列データに基づくゼロショット予測を実行
@@ -205,16 +203,16 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
     - **model_params**: モデルに渡す追加パラメータ
     """
     try:
-        logger.info(f"ゼロショット予測APIが呼び出されました")
+        logger.info("ゼロショット予測APIが呼び出されました")
 
         # 時系列データの正規化
         normalized_timestamps, normalized_values = normalize_time_series_data(
             request.timestamp, request.values, interpolation_method="auto"
         )
-        
+
         # 最後のタイムスタンプを取得
         latest_timestamp = max(normalized_timestamps)
-        
+
         # タイムスタンプの間隔を計算
         if len(normalized_timestamps) >= 2:
             # 実データから間隔を計算
@@ -222,30 +220,41 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
         else:
             # データが1点しかない場合はエラーを発生させる
             raise HTTPException(
-                status_code=400, 
-                detail="予測には少なくとも2つのデータポイントが必要です"
+                status_code=400,
+                detail="予測には少なくとも2つのデータポイントが必要です",
             )
-        
+
         # 予測期間の計算
         time_difference = request.forecast_until - latest_timestamp
-        
+
         # 時間差をdelta単位のポイント数に変換
         if delta.total_seconds() <= 0:
             raise HTTPException(
-                status_code=400, 
-                detail="タイムスタンプの間隔が正しくありません（間隔がゼロまたは負の値）"
+                status_code=400,
+                detail="タイムスタンプの間隔が正しくありません（間隔がゼロまたは負の値）",
             )
-            
+
         prediction_points = int(time_difference.total_seconds() / delta.total_seconds())
-        
+
         # 予測ポイント数が0以下の場合はエラー
         if prediction_points <= 0:
             raise HTTPException(
-                status_code=400, 
-                detail=f"予測時点が最新のデータポイント以前です。予測時点: {request.forecast_until}, 最新のデータポイント: {latest_timestamp}"
+                status_code=400,
+                detail=(
+                    "予測時点が最新のデータポイント以前です。"
+                    "予測時点: "
+                    + str(request.forecast_until)
+                    + ", 最新のデータポイント: "
+                    + str(latest_timestamp)
+                ),
             )
-        
-        logger.info(f"予測ポイント数: {prediction_points}, 予測時点: {request.forecast_until}")
+
+        logger.info(
+            "予測ポイント数: "
+            + str(prediction_points)
+            + ", 予測時点: "
+            + str(request.forecast_until)
+        )
 
         # 予測モデルの初期化
         predictor = TimeSeriesPredictor(
@@ -270,9 +279,9 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
 
         return response
     except Exception as e:
-        logger.error(f"ゼロショット予測処理に失敗しました: {e}")
+        logger.error("ゼロショット予測処理に失敗しました: " + str(e))
         raise HTTPException(
-            status_code=500, detail=f"ゼロショット予測処理に失敗しました: {str(e)}"
+            status_code=500, detail="ゼロショット予測処理に失敗しました: " + str(e)
         )
 
 
@@ -325,14 +334,14 @@ def normalize_time_series_data(
     # 補間方法の検証
     if interpolation_method not in valid_methods:
         logger.warning(
-            f"無効な補間方法: {interpolation_method}。'auto'に切り替えます。"
+            "無効な補間方法: " + interpolation_method + ". 'auto'に切り替えます。"
         )
         interpolation_method = "auto"
 
     # 自動補間方法選択
     if interpolation_method == "auto":
         interpolation_method = _determine_best_interpolation_method(timestamps, values)
-        logger.info(f"自動選択された補間方法: {interpolation_method}")
+        logger.info("自動選択された補間方法: " + interpolation_method)
 
     # pandasのDataFrameを作成
     df = pd.DataFrame({"timestamp": timestamps, "value": values})
@@ -401,7 +410,11 @@ def normalize_time_series_data(
     except Exception as e:
         # 補間に失敗した場合はエラーをログに記録し、線形補間にフォールバック
         logger.error(
-            f"補間方法 '{interpolation_method}' でエラーが発生しました: {e}。線形補間を使用します。"
+            "補間方法 '"
+            + interpolation_method
+            + "' でエラーが発生しました: "
+            + str(e)
+            + ". 線形補間を使用します。"
         )
         resampled_df = df.reindex(new_timestamps).interpolate(method="linear")
         return new_timestamps, resampled_df["value"].tolist()

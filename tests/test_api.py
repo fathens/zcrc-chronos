@@ -69,10 +69,14 @@ def test_zero_shot_predict_endpoint():
     ]
     values = [10.0 + i * 0.1 for i in range(24)]
 
+    # 最後のタイムスタンプから12時間後を予測時点として設定
+    last_timestamp = datetime.datetime.fromisoformat(timestamps[-1])
+    forecast_until = (last_timestamp + datetime.timedelta(hours=12)).isoformat()
+
     request_data = {
         "timestamp": timestamps,
         "values": values,
-        "horizon": 12,
+        "forecast_until": forecast_until,
         "model_name": "chronos_default",
     }
 
@@ -87,9 +91,17 @@ def test_zero_shot_predict_endpoint():
     assert "confidence_intervals" in data
     assert "metrics" in data
 
-    # 予測値の数が指定したhorizonと一致することを確認
-    assert len(data["forecast_timestamp"]) == request_data["horizon"]
-    assert len(data["forecast_values"]) == request_data["horizon"]
+    # 予測値の数が適切であることを確認（少なくとも1つの予測があるべき）
+    assert len(data["forecast_timestamp"]) > 0
+    assert len(data["forecast_values"]) > 0
+
+    # 最後の予測時点が指定したforecast_untilに近いことを確認
+    last_forecast_time = datetime.datetime.fromisoformat(
+        data["forecast_timestamp"][-1].replace("Z", "+00:00")
+    )
+    target_forecast_time = datetime.datetime.fromisoformat(forecast_until)
+    # 1時間以内の誤差を許容
+    assert abs((last_forecast_time - target_forecast_time).total_seconds()) < 3600
 
 
 def test_zero_shot_predict_endpoint_invalid_data():
@@ -103,10 +115,14 @@ def test_zero_shot_predict_endpoint_invalid_data():
     ]
     values = [10.0, 11.0, 12.0]  # 長さが一致しない
 
+    # 最後のタイムスタンプから6時間後を予測時点として設定
+    last_timestamp = datetime.datetime.fromisoformat(timestamps[-1])
+    forecast_until = (last_timestamp + datetime.timedelta(hours=6)).isoformat()
+
     invalid_data = {
         "timestamp": timestamps,
         "values": values,
-        "horizon": 12,
+        "forecast_until": forecast_until,
         "model_name": "chronos_default",
     }
 

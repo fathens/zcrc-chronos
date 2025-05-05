@@ -257,6 +257,9 @@ class TimeSeriesPredictor:
                     "target": values,
                 }
             )
+            # タイムスタンプを明示的にdatetime64[ns]型に変換
+            # タイムゾーン情報がある場合はそれを削除
+            df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize(None)
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
             )

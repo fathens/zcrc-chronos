@@ -491,6 +491,11 @@ def normalize_time_series_data(
     # 少なくとも元のデータと同じポイント数を維持
     num_points = len(timestamps)
 
+    # タイムスタンプの範囲とデータの個数をログに出力
+    logger.info(
+        f"タイムスタンプの範囲: {start_time.isoformat()} から {end_time.isoformat()}, データ数: {num_points}"
+    )
+
     # 間隔を計算（秒単位）- 少なくとも1秒以上の間隔を確保
     interval_seconds = (
         max(1, total_duration / (num_points - 1)) if num_points > 1 else 1

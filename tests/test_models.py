@@ -4,7 +4,6 @@
 
 import datetime
 import math
-import os
 
 import numpy as np
 import pandas as pd
@@ -497,24 +496,36 @@ def test_zero_shot_predict_implementation_verification():
 def test_save_load_model(tmp_path):
     """
     モデルの保存と読み込みのテスト
+    保存と読み込みの機能のみをテストし、実際の使用パターンに合わせたシンプルな実装にする
     """
+    import os
+
+    import pandas as pd
+
+    from src.models.predictor import TimeSeriesPredictor
+
     # 一時ディレクトリのパスを作成
     model_path = os.path.join(tmp_path, "test_model.pkl")
 
-    # モデルの学習と保存
+    # モデルインスタンスを作成
     predictor = TimeSeriesPredictor()
-    now = datetime.datetime.now()
-    timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-    values = [10.0 + i * 0.1 for i in range(24)]
-    predictor.fit(timestamps, values)
+
+    # モデルの内部状態を直接設定（実際のユースケースではzero_shot_predictなどによって設定される）
+    # 最小限の構造を持ったモックデータ
+    predictor.model = {
+        "data": pd.DataFrame({"value": [1, 2, 3]}),
+        "params": {"test_param": "test_value"},
+    }
+
+    # モデルを保存
     predictor.save_model(model_path)
 
     # モデルファイルが存在することを確認
     assert os.path.exists(model_path)
 
-    # モデルの読み込み
+    # モデルを読み込み
     loaded_predictor = TimeSeriesPredictor.load_model(model_path)
-    assert loaded_predictor.model is not None
 
-    # 読み込んだモデルの検証（予測メソッドの呼び出しはしない）
+    # 基本的な検証
+    assert loaded_predictor.model is not None
     assert loaded_predictor.model_name == predictor.model_name

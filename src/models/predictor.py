@@ -6,9 +6,8 @@ import datetime
 import os
 import tempfile
 import uuid
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 import yaml
 from loguru import logger
@@ -70,140 +69,6 @@ class TimeSeriesPredictor:
         except Exception as e:
             logger.error(f"モデル設定の読み込みに失敗しました: {e}")
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
-
-    def _prepare_data(
-        self, timestamps: List[datetime.datetime], values: List[float]
-    ) -> pd.DataFrame:
-        """
-        予測用のデータを準備
-
-        Args:
-            timestamps: タイムスタンプのリスト
-            values: 値のリスト
-
-        Returns:
-            pandas DataFrame
-        """
-        df = pd.DataFrame({"timestamp": timestamps, "value": values})
-        df.set_index("timestamp", inplace=True)
-
-        # 前処理設定に基づいて前処理を適用
-        preprocessing_config = self.config.get("preprocessing", {})
-
-        # 欠損値の補完
-        if preprocessing_config.get("impute_missing", False):
-            method = preprocessing_config.get("imputation_method", "linear")
-            if method == "linear":
-                df = df.interpolate(method="linear")
-            elif method == "ffill":
-                df = df.fillna(method="ffill")
-            elif method == "bfill":
-                df = df.fillna(method="bfill")
-            elif method == "mean":
-                df = df.fillna(df.mean())
-
-        # 外れ値の検出と処理
-        if preprocessing_config.get("outlier_detection", False):
-            method = preprocessing_config.get("outlier_method", "iqr")
-            if method == "iqr":
-                Q1 = df["value"].quantile(0.25)
-                Q3 = df["value"].quantile(0.75)
-                IQR = Q3 - Q1
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                df["value"] = df["value"].clip(lower=lower_bound, upper=upper_bound)
-            elif method == "zscore":
-                mean = df["value"].mean()
-                std = df["value"].std()
-                df["value"] = df["value"].clip(
-                    lower=mean - 3 * std, upper=mean + 3 * std
-                )
-
-        # 正規化
-        if preprocessing_config.get("normalize", False):
-            method = preprocessing_config.get("normalization_method", "minmax")
-            if method == "minmax":
-                self.min_val = df["value"].min()
-                self.max_val = df["value"].max()
-                if self.max_val > self.min_val:
-                    df["value"] = (df["value"] - self.min_val) / (
-                        self.max_val - self.min_val
-                    )
-            elif method == "standard":
-                self.mean_val = df["value"].mean()
-                self.std_val = df["value"].std()
-                if self.std_val > 0:
-                    df["value"] = (df["value"] - self.mean_val) / self.std_val
-
-        return df
-
-    def _inverse_transform(
-        self, values: Union[List[float], np.ndarray]
-    ) -> Union[List[float], np.ndarray]:
-        """
-        正規化された値を元のスケールに戻す
-
-        Args:
-            values: 正規化された値
-
-        Returns:
-            元のスケールの値
-        """
-        preprocessing_config = self.config.get("preprocessing", {})
-        if preprocessing_config.get("normalize", False):
-            method = preprocessing_config.get("normalization_method", "minmax")
-            if (
-                method == "minmax"
-                and hasattr(self, "min_val")
-                and hasattr(self, "max_val")
-            ):
-                if isinstance(values, list):
-                    return [
-                        v * (self.max_val - self.min_val) + self.min_val for v in values
-                    ]
-                else:
-                    return values * (self.max_val - self.min_val) + self.min_val
-            elif (
-                method == "standard"
-                and hasattr(self, "mean_val")
-                and hasattr(self, "std_val")
-            ):
-                if isinstance(values, list):
-                    return [v * self.std_val + self.mean_val for v in values]
-                else:
-                    return values * self.std_val + self.mean_val
-        return values
-
-    def fit(self, timestamps: List[datetime.datetime], values: List[float]) -> None:
-        """
-        モデルを学習
-
-        Args:
-            timestamps: タイムスタンプのリスト
-            values: 値のリスト
-        """
-        # 実際の実装では、chronos-boltライブラリを使用してモデルを学習
-        # ここではダミー実装
-        logger.info(f"モデル '{self.model_name}' の学習を開始します")
-
-        # データの準備
-        df = self._prepare_data(timestamps, values)
-
-        # モデルの学習
-        # 注: 実際の実装では、chronos-boltライブラリのAPIに合わせて実装
-        try:
-            # ダミー実装
-            self.model = {
-                "data": df,
-                "params": {
-                    **self.config["default_model"]["chronos"],
-                    **self.model_params,
-                },
-            }
-            logger.info(f"モデル '{self.model_name}' の学習が完了しました")
-        except Exception as e:
-            logger.error(f"モデルの学習に失敗しました: {e}")
-            raise ValueError(f"モデルの学習に失敗しました: {e}")
 
     def zero_shot_predict(
         self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
@@ -500,7 +365,7 @@ class TimeSeriesPredictor:
         try:
             # ダミー実装
             predictor = cls()
-            # fit()メソッドで作成したモデルと同じ構造のモデルを作成
+            # モデル構造を作成
             import numpy as np
             import pandas as pd
 

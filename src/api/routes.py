@@ -493,7 +493,8 @@ def normalize_time_series_data(
 
     # タイムスタンプの範囲とデータの個数をログに出力
     logger.info(
-        f"タイムスタンプの範囲: {start_time.isoformat()} から {end_time.isoformat()}, データ数: {num_points}"
+        f"タイムスタンプの範囲: {start_time.isoformat()} から {end_time.isoformat()}, "
+        f"データ数: {num_points}"
     )
 
     # 間隔を計算（秒単位）- 少なくとも1秒以上の間隔を確保
@@ -557,7 +558,8 @@ def normalize_time_series_data(
 
 
 def _determine_best_interpolation_method(
-    timestamps: List[datetime.datetime], values: List[float]
+    timestamps: List[datetime.datetime],
+    values: List[float],
 ) -> str:
     """
     時系列データの特性を分析して最適な補間方法を判別する関数

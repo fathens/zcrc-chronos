@@ -8,6 +8,7 @@ import tempfile
 import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 import yaml
 from loguru import logger
@@ -123,8 +124,10 @@ class TimeSeriesPredictor:
                 }
             )
             # タイムスタンプを明示的にdatetime64[ns]型に変換
-            # タイムゾーン情報がある場合はそれを削除
-            df["timestamp"] = pd.to_datetime(df["timestamp"]).dt.tz_localize(None)
+            # タイムゾーン情報がある場合はそれを削除（より明示的な方法を使用）
+            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            if df["timestamp"].dt.tz is not None:
+                df["timestamp"] = df["timestamp"].dt.tz_localize(None)
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
             )
@@ -366,17 +369,16 @@ class TimeSeriesPredictor:
             # ダミー実装
             predictor = cls()
             # モデル構造を作成
-            import numpy as np
-            import pandas as pd
 
             # ダミーの時系列データを生成
             now = datetime.datetime.now()
             timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]
-            values = np.random.normal(10, 2, len(timestamps)).tolist()
+            # 最新のNumPy推奨方法を使用
+            values = np.random.default_rng().normal(10, 2, len(timestamps)).tolist()
 
             # データフレームを作成
             df = pd.DataFrame({"timestamp": timestamps, "value": values})
-            df.set_index("timestamp", inplace=True)
+            df = df.set_index("timestamp")
 
             # モデルの作成
             predictor.model = {

@@ -478,7 +478,7 @@ def normalize_time_series_data(
     df = pd.DataFrame({"timestamp": timestamps, "value": values})
 
     # タイムスタンプをインデックスに設定
-    df.set_index("timestamp", inplace=True)
+    df = df.set_index("timestamp")
 
     # 開始時刻と終了時刻を取得
     start_time = min(timestamps)
@@ -580,7 +580,8 @@ def _determine_best_interpolation_method(
         (timestamps[i + 1] - timestamps[i]).total_seconds()
         for i in range(len(timestamps) - 1)
     ]
-    time_diff_array = np.array(time_diffs)
+    # 明示的に浮動小数点型を指定してNumPy配列を作成
+    time_diff_array = np.array(time_diffs, dtype=np.float64)
 
     # 時間間隔の変動係数（標準偏差/平均）を計算
     # 変動係数が大きいほど、時間間隔が不規則
@@ -591,7 +592,8 @@ def _determine_best_interpolation_method(
     )
 
     # 値の変動性を計算
-    values_array = np.array(values)
+    # 明示的に浮動小数点型を指定してNumPy配列を作成
+    values_array = np.array(values, dtype=np.float64)
     values_diff = np.diff(values_array)
 
     # すべての値が同じかどうか確認（最適化のため）
@@ -615,7 +617,8 @@ def _determine_best_interpolation_method(
 
     # 外れ値の検出
     # 四分位範囲（IQR）を用いた外れ値検出
-    q1, q3 = np.percentile(values_array, [25, 75])
+    # np.percentileの代わりにnp.quantileを使用（将来的な非推奨を避けるため）
+    q1, q3 = np.quantile(values_array, [0.25, 0.75])
     iqr = q3 - q1
     lower_bound = q1 - 1.5 * iqr
     upper_bound = q3 + 1.5 * iqr

@@ -111,19 +111,20 @@ class TimeSeriesPredictor:
             data_length = len(values)
             logger.info(f"入力データサイズ: {data_length}, 予測期間: {horizon}")
 
-            # 予測期間がデータサイズに対して大きすぎる場合の調整
-            max_safe_horizon = max(1, data_length // 10)  # データサイズの10%を上限とする
+            # 予測期間がデータサイズに対して大きすぎる場合の調整（より緩い制限）
+            # 価格予測では長期予測も重要なので制限を緩和
+            max_safe_horizon = max(12, data_length // 4)  # データサイズの25%を上限とし、最低12時間確保
             if horizon > max_safe_horizon:
                 original_horizon = horizon
                 horizon = max_safe_horizon
                 logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
 
-            # AutoGluonの最小要件を確保
-            # 一般的にprediction_length * 3 + 50程度の最小データが必要
-            min_required_length = horizon * 4 + 100
+            # AutoGluonの最小要件を確保（要件を大幅に緩和）
+            # より実用的な最小データ要件に変更
+            min_required_length = horizon * 2 + 20  # 従来の要件を大幅に緩和
             if data_length < min_required_length:
-                # データが不足している場合はさらに予測期間を縮小
-                horizon = max(1, (data_length - 100) // 4)
+                # データが不足している場合でも実用的な予測期間を確保
+                horizon = max(6, (data_length - 20) // 2)  # 最低6時間の予測期間を確保
                 logger.warning(f"データ不足のため予測期間をさらに調整します: {horizon}")
 
             logger.info(f"調整後の予測期間: {horizon}")
@@ -219,7 +220,8 @@ class TimeSeriesPredictor:
                     val_step_size=1,
                     # モデル選択の設定を緩和
                     skip_model_selection=False,  # モデル選択を有効にして最適なモデルを選ぶ
-                    # hyperparameters を削除してAutoGluonにモデル選択を任せる
+                    # 価格予測に適したモデルを優先
+                    excluded_model_types=["Naive"],  # Naiveモデルを除外
                     # より多くのモデルを試すことで、DeepARが失敗しても他のモデルが動作する可能性を高める
                 )
                 logger.info("AutoGluon fit が完了しました")
@@ -241,11 +243,12 @@ class TimeSeriesPredictor:
                     num_val_windows=0,  # 検証を無効化
                     val_step_size=1,
                     hyperparameters={
-                        # DeepARを除外してより安定したモデルのみを使用
-                        "Naive": {},
+                        # Naiveモデルを除外し、より高度なモデルを優先
                         "SeasonalNaive": {},
                         "ETS": {},
                         "Theta": {},
+                        "RecursiveTabular": {},  # TabularモデルはパターンをよりよくキャッチHyperpara
+                        "Chronos": {},  # Chronosモデルを追加
                     },
                 )
                 logger.info("再試行での AutoGluon fit が完了しました")

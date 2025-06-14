@@ -512,14 +512,29 @@ def normalize_time_series_data(
 
     # 新しいタイムスタンプ数が元のデータポイント数よりも少なくならないように調整
     if len(new_timestamps) < num_points:
-        # 間隔を調整して、より細かい時間間隔を作成
-        adjusted_interval = total_duration / (num_points + 1)
-        new_timestamps = []
-        current_time = start_time
+        # 時間範囲が0または非常に小さい場合の対処
+        if total_duration <= 0:
+            # 同一時刻または時間範囲が0の場合、元のタイムスタンプをそのまま使用
+            new_timestamps = timestamps.copy()
+        else:
+            # 間隔を調整して、元のデータポイント数を維持（2倍にしない）
+            # 価格データでは元のデータポイント数を保持することが重要
+            adjusted_interval = total_duration / max(1, num_points - 1)
+            new_timestamps = []
+            current_time = start_time
 
-        while current_time <= end_time:
-            new_timestamps.append(current_time)
-            current_time += datetime.timedelta(seconds=adjusted_interval)
+            # 無限ループ防止とデータポイント数制限
+            max_points = num_points * 3  # 最大でも3倍まで
+            point_count = 0
+            
+            while current_time <= end_time and point_count < max_points:
+                new_timestamps.append(current_time)
+                current_time += datetime.timedelta(seconds=adjusted_interval)
+                point_count += 1
+                
+                # 安全装置：間隔が非常に小さい場合の停止
+                if adjusted_interval < 0.001:  # 1ミリ秒未満
+                    break
 
     # 補間方法に応じた追加パラメータの設定
     interpolation_kwargs = {}
@@ -615,13 +630,13 @@ def _determine_best_interpolation_method(
     else:
         smoothness = 0
 
-    # 外れ値の検出
-    # 四分位範囲（IQR）を用いた外れ値検出
-    # np.percentileの代わりにnp.quantileを使用（将来的な非推奨を避けるため）
+    # 外れ値の検出（価格データに適した緩い基準）
+    # 価格データでは急激な変動も正常な動きなので、より緩い基準を使用
     q1, q3 = np.quantile(values_array, [0.25, 0.75])
     iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
+    # 従来の1.5倍から3.0倍に緩和（価格変動を外れ値として扱わない）
+    lower_bound = q1 - 3.0 * iqr
+    upper_bound = q3 + 3.0 * iqr
     outliers = [x for x in values if x < lower_bound or x > upper_bound]
     has_outliers = len(outliers) > 0
 
@@ -630,20 +645,23 @@ def _determine_best_interpolation_method(
         # 時間考慮補間が最適
         return "time"
 
-    # 判断ロジック：データの滑らかさと変動性に基づく選択
-    if smoothness < 0.1 and value_volatility < 0.2:  # データが非常に滑らか
-        if has_outliers:
-            # 外れ値があるが滑らかなトレンドがある場合、cubic が適切
-            return "cubic"
-        else:
-            # 外れ値がなく非常に滑らかな場合、スプラインが適切
-            return "spline" if len(values) > 10 else "cubic"
-    elif value_volatility > 1.0 or has_outliers:  # 変動が大きいまたは外れ値がある
-        # 変動が大きい場合、線形補間が安定
+    # 判断ロジック：価格データに特化した補間方法選択
+    # 価格データでは変動の保持が重要なので、平滑化を避ける
+    
+    # 非常に極端な外れ値がある場合のみ線形補間を使用
+    if has_outliers and len(outliers) > len(values) * 0.2:  # 20%以上が外れ値
         return "linear"
-    elif 0.1 <= smoothness < 0.5:  # 中程度の滑らかさ
-        # 中程度の滑らかさには2次スプラインが適切
+    
+    # 時系列データの特性に基づく選択
+    if value_volatility > 2.0:  # 非常に高い変動性
+        # 高い変動性を保持するため線形補間
+        return "linear"
+    elif len(values) > 20 and smoothness < 0.05:  # 十分なデータ点があり非常に滑らか
+        # データ点が多く滑らかな場合のみcubicを使用
+        return "cubic"
+    elif len(values) > 10 and 0.05 <= smoothness < 0.3:  # 中程度の滑らかさ
+        # 中程度の滑らかさには2次補間
         return "quadratic"
     else:
-        # その他のケースでは線形補間が最も安全で予測可能
+        # デフォルトは線形補間（変動を最も保持）
         return "linear"

@@ -111,20 +111,20 @@ class TimeSeriesPredictor:
             data_length = len(values)
             logger.info(f"入力データサイズ: {data_length}, 予測期間: {horizon}")
 
-            # 予測期間がデータサイズに対して大きすぎる場合の調整（より緩い制限）
-            # 価格予測では長期予測も重要なので制限を緩和
-            max_safe_horizon = max(12, data_length // 4)  # データサイズの25%を上限とし、最低12時間確保
+            # 予測期間がデータサイズに対して大きすぎる場合の調整（大幅に緩和）
+            # 価格予測では長期予測が重要なので制限を大幅に緩和
+            max_safe_horizon = max(24, data_length // 2)  # データサイズの50%を上限とし、最低24時間確保
             if horizon > max_safe_horizon:
                 original_horizon = horizon
                 horizon = max_safe_horizon
                 logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
 
-            # AutoGluonの最小要件を確保（要件を大幅に緩和）
-            # より実用的な最小データ要件に変更
-            min_required_length = horizon * 2 + 20  # 従来の要件を大幅に緩和
+            # AutoGluonの最小要件を確保（さらに緩和）
+            # 実用性を優先して最小データ要件を大幅に削減
+            min_required_length = horizon + 10  # 予測期間+10ポイントあれば十分
             if data_length < min_required_length:
-                # データが不足している場合でも実用的な予測期間を確保
-                horizon = max(6, (data_length - 20) // 2)  # 最低6時間の予測期間を確保
+                # データが不足している場合でも長期予測を優先
+                horizon = max(12, data_length - 10)  # 最低12時間の予測期間を確保
                 logger.warning(f"データ不足のため予測期間をさらに調整します: {horizon}")
 
             logger.info(f"調整後の予測期間: {horizon}")
@@ -207,9 +207,17 @@ class TimeSeriesPredictor:
             # フィット - より寛容な設定を使用
             try:
                 # 検証用の設定をデータサイズに応じて動的調整
-                # num_val_windowsは最大でもデータサイズから予測期間を引いた数の半分以下
-                max_val_windows = max(1, (data_length - horizon) // (horizon * 2))
-                num_val_windows = min(1, max_val_windows)  # 最大1に制限
+                # AutoGluonの最小要件（29ポイント）を考慮
+                min_required_for_validation = horizon + 10  # 予測期間 + バッファ
+                if data_length >= min_required_for_validation:
+                    # 十分なデータがある場合は検証を実行
+                    max_val_windows = max(1, (data_length - horizon) // (horizon * 2))
+                    num_val_windows = min(1, max_val_windows)
+                else:
+                    # データが不足している場合は検証を無効化
+                    num_val_windows = 0
+                    logger.warning(f"データ不足のため検証を無効化します: {data_length} < {min_required_for_validation}")
+                
                 logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size=1")
                 predictor.fit(
                     time_series_data,

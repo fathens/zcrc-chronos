@@ -76,14 +76,48 @@ class TimeSeriesPredictor:
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
+        
+        本関数は価格データの直線的予測問題を解決するために最適化されています。
+        主要な改善点：
+        1. Naiveモデルの完全除外（直線的予測の根本原因）
+        2. 柔軟な予測期間調整（短期～長期予測に対応）
+        3. データサイズに応じた動的モデル選択
+        4. 価格変動パターンの保持を優先
+
+        予測期間の動的調整ロジック：
+        - 短期予測（≤6時間）: 最低4時間確保、軽量で高速なモデル使用
+        - 中期予測（≤12時間）: 最低6時間確保、バランス型モデル使用  
+        - 長期予測（>12時間）: 最低12時間確保、高度なモデル使用
+        
+        モデル選択戦略：
+        - メイン学習: Naiveモデルを除外し、RecursiveTabular等の高度なモデルを優先
+        - フォールバック: 予測期間に応じてETS, SeasonalNaive, Chronos等を選択
+        - 短期予測用: ETS（短期予測に適している）を中心とした軽量構成
+        - 長期予測用: Chronos, TemporalFusionTransformer等の高度なモデル
 
         Args:
             timestamp: 時系列データのタイムスタンプ（正規化済みを前提）
             values: 時系列データの値（正規化済みを前提）
-            horizon: 予測期間
+            horizon: 予測期間（時間単位）
+                    - 6時間以下: 短期予測として処理
+                    - 12時間以下: 中期予測として処理
+                    - 12時間超: 長期予測として処理
 
         Returns:
-            予測期間のタイムスタンプ、予測値、メタデータのタプル
+            Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
+                - 予測期間のタイムスタンプリスト
+                - 予測値リスト
+                - メタデータ辞書（使用モデル、調整後予測期間等を含む）
+                
+        Raises:
+            ValueError: 予測処理が完全に失敗した場合
+            
+        Note:
+            この実装により以下の問題が解決されています：
+            - 直線的予測（Naiveモデルによる平坦な予測線）
+            - 予測期間の過度な縮小（元の問題：24時間→1時間への強制縮小）
+            - 短期予測の柔軟性喪失
+            - 価格変動パターンの損失
         """
         try:
             logger.info(
@@ -111,20 +145,28 @@ class TimeSeriesPredictor:
             data_length = len(values)
             logger.info(f"入力データサイズ: {data_length}, 予測期間: {horizon}")
 
-            # 予測期間がデータサイズに対して大きすぎる場合の調整（大幅に緩和）
-            # 価格予測では長期予測が重要なので制限を大幅に緩和
-            max_safe_horizon = max(24, data_length // 2)  # データサイズの50%を上限とし、最低24時間確保
+            # 予測期間がデータサイズに対して大きすぎる場合の調整（柔軟な制限）
+            # 短期予測と長期予測の両方に対応
+            max_safe_horizon = max(horizon, data_length // 2)  # 要求された予測期間かデータサイズの50%の大きい方
             if horizon > max_safe_horizon:
                 original_horizon = horizon
                 horizon = max_safe_horizon
                 logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
 
-            # AutoGluonの最小要件を確保（さらに緩和）
-            # 実用性を優先して最小データ要件を大幅に削減
+            # AutoGluonの最小要件を確保（バランス型）
+            # 短期予測でも機能するよう要件を調整
             min_required_length = horizon + 10  # 予測期間+10ポイントあれば十分
             if data_length < min_required_length:
-                # データが不足している場合でも長期予測を優先
-                horizon = max(12, data_length - 10)  # 最低12時間の予測期間を確保
+                # データが不足している場合の動的調整
+                if horizon <= 6:
+                    # 短期予測（6時間以下）の場合：最低4時間確保
+                    horizon = max(4, data_length - 6)
+                elif horizon <= 12:
+                    # 中期予測（12時間以下）の場合：最低6時間確保
+                    horizon = max(6, data_length - 8)
+                else:
+                    # 長期予測（12時間超）の場合：最低12時間確保
+                    horizon = max(12, data_length - 10)
                 logger.warning(f"データ不足のため予測期間をさらに調整します: {horizon}")
 
             logger.info(f"調整後の予測期間: {horizon}")
@@ -243,21 +285,33 @@ class TimeSeriesPredictor:
                     path=temp_model_dir + "_retry",
                     verbosity=1,  # ログレベルを下げる
                 )
-                # 再試行時は検証を最小限に
-                predictor.fit(
-                    time_series_data,
-                    presets="medium_quality",  # より軽量なプリセットを使用
-                    time_limit=time_limit,
-                    num_val_windows=0,  # 検証を無効化
-                    val_step_size=1,
-                    hyperparameters={
-                        # Naiveモデルを除外し、より高度なモデルを優先
+                # 再試行時は予測期間に応じて設定を調整
+                if horizon <= 6:
+                    # 短期予測用：軽量で高速なモデルを選択
+                    retry_hyperparameters = {
+                        "ETS": {},  # 短期予測に適している
+                        "SeasonalNaive": {},  # Naiveより高度だが軽量
+                        "RecursiveTabular": {},  # パターン学習可能
+                    }
+                    retry_time_limit = min(time_limit, 20)  # 短時間で完了
+                else:
+                    # 中長期予測用：より高度なモデルを選択
+                    retry_hyperparameters = {
                         "SeasonalNaive": {},
                         "ETS": {},
                         "Theta": {},
-                        "RecursiveTabular": {},  # TabularモデルはパターンをよりよくキャッチHyperpara
-                        "Chronos": {},  # Chronosモデルを追加
-                    },
+                        "RecursiveTabular": {},
+                        "Chronos": {},
+                    }
+                    retry_time_limit = time_limit
+                
+                predictor.fit(
+                    time_series_data,
+                    presets="medium_quality",
+                    time_limit=retry_time_limit,
+                    num_val_windows=0,  # 検証を無効化
+                    val_step_size=1,
+                    hyperparameters=retry_hyperparameters,
                 )
                 logger.info("再試行での AutoGluon fit が完了しました")
 

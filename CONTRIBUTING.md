@@ -24,8 +24,23 @@ AutoGluon-TimeSeriesライブラリを使用した日本語対応の時系列予
 conda create -n zcrc-chronos python=3.12
 conda activate zcrc-chronos
 
-# 依存関係のインストール
+# 依存関係のインストール（テスト用パッケージも含む）
 conda env update -f environment.yml
+```
+
+**重要**: 以下の全てのコマンドは `conda activate zcrc-chronos` でconda環境をアクティベートしてから実行してください。
+
+**注意**: `environment.yml`には開発・テストに必要な全てのパッケージ（pytest, fastapi, uvicorn, httpx等）が含まれています。
+
+#### トラブルシューティング
+`conda env update`が失敗またはタイムアウトした場合：
+```bash
+# 個別にautogluonをインストール
+pip install autogluon.timeseries>=1.3.0
+
+# または段階的にインストール
+pip install pytest fastapi uvicorn httpx pyyaml loguru pandas numpy
+pip install autogluon.timeseries
 ```
 
 ### アプリケーション実行
@@ -40,6 +55,8 @@ python -m src.api.server
 ```
 
 ### テスト実行
+
+#### 基本テスト実行
 ```bash
 # 全テスト実行
 pytest
@@ -51,6 +68,42 @@ pytest tests/test_models.py
 # 実ライブラリを使用（モックなし）
 NEED_REAL_LIBRARY=true pytest
 ```
+
+#### predict_zero_shot エンドポイントのテスト
+
+**オプション1: 簡単なテスト実行（推奨）**
+```bash
+# 簡単なテストスクリプトの実行（autogluonモックを自動適用）
+python test_predict_simple.py
+```
+
+**オプション2: フルテストスイート実行**
+```bash
+# predict_zero_shot の包括的テスト実行
+pytest tests/test_predict_zero_shot.py -v
+
+# 特定のテストクラス実行
+pytest tests/test_predict_zero_shot.py::TestPredictZeroShotValidInputs -v
+```
+
+**注意**: オプション2にはautogluon.timeseriesライブラリが必要です（`conda env update -f environment.yml`で自動インストール）
+
+**依存関係の確認:**
+```bash
+# autogluonが正しくインストールされているか確認
+python -c "import autogluon.timeseries; print('autogluon.timeseries available')"
+
+# インストールされていない場合
+pip install autogluon.timeseries>=1.3.0
+```
+
+**テスト内容:**
+- `test_predict_simple.py`: 基本的な予測機能とエラーハンドリングの動作確認
+- `tests/test_predict_zero_shot.py`: 正常入力、無効入力、エッジケース、統合テストの包括的テストスイート
+
+**注意事項:**
+- 実際のautogluonライブラリでは、最小データポイント（2点）のテストが失敗する可能性があります（頻度推論の制限）
+- これは技術的制限であり、実際のAPI機能には影響しません
 
 ### コード品質チェック
 ```bash
@@ -100,6 +153,16 @@ docker compose down
   - `NEED_REAL_LIBRARY=true`: 実際のAutoGluonライブラリを使用
   - `CAN_SKIP_REAL_LIBRARY=true`: 実ライブラリテストをスキップ
 - `tests/conftest.py`にchronos-boltライブラリ用モックフィクスチャを配置
+
+#### 主要テストファイル
+- `tests/test_predict_zero_shot.py`: predict_zero_shotエンドポイントの包括的テストスイート
+  - 正常入力テスト（基本予測、最小データポイント、異なる予測期間、不規則間隔データ等）
+  - 無効入力テスト（データ不足、長さ不一致、過去の予測時点、時間間隔エラー等）
+  - エッジケーステスト（信頼区間、評価指標、大データセット、極端値等）
+  - 統合テスト（TimeSeriesPredictor連携、例外処理、レスポンス形式検証等）
+- `test_predict_simple.py`: autogluonライブラリなしでの基本動作確認用スクリプト
+  - 自動モック設定により依存関係なしでテスト実行可能
+  - 基本的な予測機能とエラーハンドリングの動作確認
 
 ### データ処理
 - 複数の補間手法による自動時系列正規化

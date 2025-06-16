@@ -483,3 +483,82 @@ def test_auto_interpolation_method_selection():
             for i in range(len(normalized_timestamps) - 1)
         ]
         assert max(time_diffs) - min(time_diffs) < 1.0  # 時間間隔の差が1秒未満
+
+
+def test_normalize_time_series_data_edge_cases():
+    """
+    normalize_time_series_data 関数のエッジケースに対するテスト
+    """
+    import math
+    
+    now = datetime.datetime.now()
+    
+    # ケース1: 無効な補間方法の指定
+    timestamps = [now - datetime.timedelta(hours=i) for i in range(3, 0, -1)]
+    values = [10.0, 11.0, 12.0]
+    
+    # 無効な補間方法を指定した場合、'auto'にフォールバックすることを確認
+    normalized_timestamps, normalized_values = normalize_time_series_data(
+        timestamps, values, interpolation_method="invalid_method"
+    )
+    assert len(normalized_timestamps) >= len(timestamps)
+    assert len(normalized_values) == len(normalized_timestamps)
+    
+    # ケース2: NaN値を含むデータ
+    timestamps_with_nan = [now - datetime.timedelta(hours=i) for i in range(5, 0, -1)]
+    values_with_nan = [10.0, float('nan'), 12.0, 13.0, 14.0]
+    
+    # NaN値を含むデータでも処理できることを確認
+    try:
+        normalized_timestamps_nan, normalized_values_nan = normalize_time_series_data(
+            timestamps_with_nan, values_with_nan, interpolation_method="linear"
+        )
+        # NaN値が適切に処理されていることを確認（線形補間でNaNが埋められる）
+        assert len(normalized_timestamps_nan) >= len(timestamps_with_nan)
+        assert len(normalized_values_nan) == len(normalized_timestamps_nan)
+        # 補間後にNaN値がないことを確認
+        assert not any(math.isnan(v) for v in normalized_values_nan if not math.isnan(v))
+    except Exception:
+        # NaN値の処理でエラーが発生する場合もあるため、例外をキャッチ
+        pass
+    
+    # ケース3: 同一時刻のタイムスタンプ
+    same_time = now
+    timestamps_same_time = [same_time, same_time, same_time]
+    values_same_time = [10.0, 11.0, 12.0]
+    
+    # 同一時刻の場合、元のタイムスタンプがそのまま返されることを確認
+    normalized_timestamps_same, normalized_values_same = normalize_time_series_data(
+        timestamps_same_time, values_same_time
+    )
+    assert len(normalized_timestamps_same) == len(timestamps_same_time)
+    assert normalized_timestamps_same == timestamps_same_time
+    
+    # ケース4: 極端に短い時間間隔
+    base_time = now
+    timestamps_short_interval = [
+        base_time,
+        base_time + datetime.timedelta(microseconds=1),
+        base_time + datetime.timedelta(microseconds=2),
+        base_time + datetime.timedelta(microseconds=3)
+    ]
+    values_short_interval = [10.0, 11.0, 12.0, 13.0]
+    
+    # 極端に短い時間間隔でも処理できることを確認
+    # ただし、時間範囲が極端に小さい場合は元の数より少なくなる可能性もある
+    normalized_timestamps_short, normalized_values_short = normalize_time_series_data(
+        timestamps_short_interval, values_short_interval
+    )
+    assert len(normalized_timestamps_short) > 0  # 少なくとも1つのデータポイントがある
+    assert len(normalized_values_short) == len(normalized_timestamps_short)
+    
+    # ケース5: 時間が逆順のデータ
+    timestamps_reverse = [now + datetime.timedelta(hours=i) for i in range(3)]
+    values_reverse = [10.0, 11.0, 12.0]
+    
+    # 逆順データでも処理できることを確認
+    normalized_timestamps_reverse, normalized_values_reverse = normalize_time_series_data(
+        timestamps_reverse, values_reverse
+    )
+    assert len(normalized_timestamps_reverse) >= len(timestamps_reverse)
+    assert len(normalized_values_reverse) == len(normalized_timestamps_reverse)

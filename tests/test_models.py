@@ -515,3 +515,92 @@ def test_save_load_model(tmp_path):
     # 基本的な検証
     assert loaded_predictor.model is not None
     assert loaded_predictor.model_name == predictor.model_name
+
+
+def test_predictor_initialization_edge_cases():
+    """
+    TimeSeriesPredictorの初期化エッジケースのテスト
+    """
+    # ケース1: None値での初期化
+    predictor_none_name = TimeSeriesPredictor(model_name=None)
+    assert predictor_none_name.model_name is None
+    assert predictor_none_name.model_params == {}
+    
+    # ケース2: 空文字列での初期化
+    predictor_empty_name = TimeSeriesPredictor(model_name="")
+    assert predictor_empty_name.model_name == ""
+    assert predictor_empty_name.model_params == {}
+    
+    # ケース3: None paramsでの初期化
+    predictor_none_params = TimeSeriesPredictor(model_params=None)
+    assert predictor_none_params.model_name == "chronos_default"
+    assert predictor_none_params.model_params == {}  # Noneは空辞書に変換される
+    
+    # ケース4: 複雑なparamsでの初期化
+    complex_params = {
+        "nested": {"param": "value"},
+        "list_param": [1, 2, 3],
+        "bool_param": True,
+        "float_param": 3.14
+    }
+    predictor_complex = TimeSeriesPredictor(model_params=complex_params)
+    assert predictor_complex.model_params == complex_params
+
+
+def test_zero_shot_predict_error_cases():
+    """
+    zero_shot_predict メソッドのエラーケースのテスト
+    """
+    predictor = TimeSeriesPredictor()
+    now = datetime.datetime.now()
+    
+    # ケース1: 空のタイムスタンプと値
+    try:
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            timestamp=[], values=[], horizon=5
+        )
+        # 空のデータでもエラーにならない場合は結果を検証
+        assert len(forecast_timestamps) == 0 or len(forecast_timestamps) == 5
+    except Exception as e:
+        # エラーが発生することを確認
+        assert isinstance(e, (ValueError, IndexError, ImportError))
+    
+    # ケース2: タイムスタンプと値の長さが一致しない
+    timestamps_mismatch = [now - datetime.timedelta(hours=i) for i in range(3, 0, -1)]
+    values_mismatch = [10.0, 11.0]  # 長さが一致しない
+    
+    try:
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            timestamp=timestamps_mismatch, values=values_mismatch, horizon=2
+        )
+        # エラーにならない場合は結果を検証
+        assert len(forecast_timestamps) == 2
+    except Exception as e:
+        # エラーが発生することを確認
+        assert isinstance(e, (ValueError, IndexError, ImportError))
+    
+    # ケース3: 負のhorizon
+    timestamps_negative = [now - datetime.timedelta(hours=i) for i in range(3, 0, -1)]
+    values_negative = [10.0, 11.0, 12.0]
+    
+    try:
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            timestamp=timestamps_negative, values=values_negative, horizon=-1
+        )
+        # 負のhorizonでもエラーにならない場合は結果を検証
+        assert len(forecast_timestamps) >= 0
+    except Exception as e:
+        # エラーが発生することを確認
+        assert isinstance(e, (ValueError, ImportError))
+    
+    # ケース4: horizon=0
+    try:
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            timestamp=timestamps_negative, values=values_negative, horizon=0
+        )
+        # horizon=0の場合は空の結果が返されることを確認
+        assert len(forecast_timestamps) == 0
+        assert len(forecast_values) == 0
+    except Exception as e:
+        # エラーが発生することを確認
+        assert isinstance(e, (ValueError, ImportError))

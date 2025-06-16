@@ -153,21 +153,20 @@ class TimeSeriesPredictor:
                 horizon = max_safe_horizon
                 logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
 
-            # AutoGluonの最小要件を確保（バランス型）
-            # 短期予測でも機能するよう要件を調整
-            min_required_length = horizon + 10  # 予測期間+10ポイントあれば十分
-            if data_length < min_required_length:
-                # データが不足している場合の動的調整
-                if horizon <= 6:
-                    # 短期予測（6時間以下）の場合：最低4時間確保
-                    horizon = max(4, data_length - 6)
-                elif horizon <= 12:
-                    # 中期予測（12時間以下）の場合：最低6時間確保
-                    horizon = max(6, data_length - 8)
+            # AutoGluonの厳格な最小要件を回避
+            # 実際の制約: train_data length >= prediction_length + num_val_windows * val_step_size + margin
+            autogluon_min_required = horizon + 5  # より現実的な最小要件
+            
+            if data_length < autogluon_min_required:
+                # データが不足している場合は予測期間を大幅に削減
+                # AutoGluonが確実に動作する範囲に調整
+                if data_length >= 10:
+                    horizon = max(3, data_length - 7)  # 十分な余裕を確保
+                elif data_length >= 6:
+                    horizon = max(2, data_length - 4)  # 最小構成
                 else:
-                    # 長期予測（12時間超）の場合：最低12時間確保
-                    horizon = max(12, data_length - 10)
-                logger.warning(f"データ不足のため予測期間をさらに調整します: {horizon}")
+                    horizon = 1  # 最後の手段
+                logger.warning(f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)")
 
             logger.info(f"調整後の予測期間: {horizon}")
 
@@ -248,32 +247,41 @@ class TimeSeriesPredictor:
 
             # フィット - より寛容な設定を使用
             try:
-                # 検証用の設定をデータサイズに応じて動的調整
-                # AutoGluonの最小要件（29ポイント）を考慮
-                min_required_for_validation = horizon + 10  # 予測期間 + バッファ
-                if data_length >= min_required_for_validation:
-                    # 十分なデータがある場合は検証を実行
-                    max_val_windows = max(1, (data_length - horizon) // (horizon * 2))
-                    num_val_windows = min(1, max_val_windows)
-                else:
-                    # データが不足している場合は検証を無効化
-                    num_val_windows = 0
-                    logger.warning(f"データ不足のため検証を無効化します: {data_length} < {min_required_for_validation}")
+                # AutoGluonの厳格な要件を回避するための設定
+                # データサイズに関係なく動作するよう調整
                 
-                logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size=1")
-                predictor.fit(
-                    time_series_data,
-                    presets=preset,
-                    time_limit=time_limit,
-                    # 検証用の設定を緩和
-                    num_val_windows=num_val_windows,
-                    val_step_size=1,
-                    # モデル選択の設定を緩和
-                    skip_model_selection=False,  # モデル選択を有効にして最適なモデルを選ぶ
-                    # 価格予測に適したモデルを優先
-                    excluded_model_types=["Naive"],  # Naiveモデルを除外
-                    # より多くのモデルを試すことで、DeepARが失敗しても他のモデルが動作する可能性を高める
-                )
+                # AutoGluonの厳格な内部チェックを回避
+                # より安全な設定: データサイズに大きな余裕を持たせる
+                safe_margin = max(10, horizon * 2)  # 予測期間の2倍または10の大きい方
+                
+                if data_length >= horizon + safe_margin:
+                    # 十分にデータがある場合のみ検証を実行
+                    num_val_windows = 1
+                    val_step_size = 1
+                else:
+                    # 少しでも不安がある場合は検証を無効化
+                    num_val_windows = 0  
+                    val_step_size = 1
+                    logger.warning(f"安全のため検証を無効化: data_length={data_length}, horizon={horizon}, required_margin={safe_margin}")
+                
+                logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size={val_step_size}")
+                
+                # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
+                fit_kwargs = {
+                    "train_data": time_series_data,
+                    "presets": preset,
+                    "time_limit": time_limit,
+                    "num_val_windows": num_val_windows,
+                    "val_step_size": val_step_size,
+                    "skip_model_selection": False,
+                    "excluded_model_types": ["Naive"],
+                }
+                
+                # num_val_windows=0の場合はtuning_dataを明示的に指定
+                if num_val_windows == 0:
+                    fit_kwargs["tuning_data"] = time_series_data
+                
+                predictor.fit(**fit_kwargs)
                 logger.info("AutoGluon fit が完了しました")
             except Exception as fit_error:
                 logger.error(f"AutoGluon fit でエラーが発生しました: {fit_error}")
@@ -305,14 +313,18 @@ class TimeSeriesPredictor:
                     }
                     retry_time_limit = time_limit
                 
-                predictor.fit(
-                    time_series_data,
-                    presets="medium_quality",
-                    time_limit=retry_time_limit,
-                    num_val_windows=0,  # 検証を無効化
-                    val_step_size=1,
-                    hyperparameters=retry_hyperparameters,
-                )
+                # フォールバック時も同様の修正を適用
+                retry_fit_kwargs = {
+                    "train_data": time_series_data,
+                    "presets": "medium_quality",
+                    "time_limit": retry_time_limit,
+                    "num_val_windows": 0,
+                    "val_step_size": 1,
+                    "hyperparameters": retry_hyperparameters,
+                    "tuning_data": time_series_data  # num_val_windows=0エラーを回避
+                }
+                
+                predictor.fit(**retry_fit_kwargs)
                 logger.info("再試行での AutoGluon fit が完了しました")
 
             # 予測を実行

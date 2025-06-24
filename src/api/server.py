@@ -100,6 +100,8 @@ def start_server():
         port=config["server"]["port"],
         reload=config["server"]["debug"],
         log_level=config["logging"]["level"].lower(),
+        timeout_keep_alive=2000,  # 33分20秒のkeep-aliveタイムアウト
+        timeout_graceful_shutdown=60,  # 60秒のグレースフルシャットダウン
     )
 
 

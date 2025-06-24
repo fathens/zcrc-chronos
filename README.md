@@ -115,10 +115,4 @@ black src tests
 flake8 src tests
 ```
 
-## ライセンス
-
-[ライセンス情報]
-
-## 貢献
-
-[貢献方法の説明]
+さらに詳しくは CONTRIBUTING.md を参照してください。

@@ -40,9 +40,9 @@ class TimeSeriesPredictor:
     """
 
     def __init__(
-        self,
-        model_name: str = "chronos_default",
-        model_params: Optional[Dict[str, Any]] = None,
+            self,
+            model_name: str = "chronos_default",
+            model_params: Optional[Dict[str, Any]] = None,
     ):
         """
         初期化
@@ -72,7 +72,7 @@ class TimeSeriesPredictor:
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
 
     def zero_shot_predict(
-        self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
+            self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
@@ -156,7 +156,7 @@ class TimeSeriesPredictor:
             # AutoGluonの厳格な最小要件を回避
             # 実際の制約: train_data length >= prediction_length + num_val_windows * val_step_size + margin
             autogluon_min_required = horizon + 5  # より現実的な最小要件
-            
+
             if data_length < autogluon_min_required:
                 # データが不足している場合は予測期間を大幅に削減
                 # AutoGluonが確実に動作する範囲に調整
@@ -166,7 +166,8 @@ class TimeSeriesPredictor:
                     horizon = max(2, data_length - 4)  # 最小構成
                 else:
                     horizon = 1  # 最後の手段
-                logger.warning(f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)")
+                logger.warning(
+                    f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)")
 
             logger.info(f"調整後の予測期間: {horizon}")
 
@@ -207,7 +208,8 @@ class TimeSeriesPredictor:
             # データフレームの基本統計をログ出力
             target_mean = df['target'].mean()
             target_std = df['target'].std()
-            logger.info(f"データフレーム統計: shape={df.shape}, target_mean={target_mean:.4f}, target_std={target_std:.4f}")
+            logger.info(
+                f"データフレーム統計: shape={df.shape}, target_mean={target_mean:.4f}, target_std={target_std:.4f}")
 
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
@@ -225,10 +227,10 @@ class TimeSeriesPredictor:
             elif data_length < 100:
                 # 小さなデータセットの場合
                 preset = "medium_quality"
-                time_limit = model_params.get("time_limit", 60)
+                time_limit = model_params.get("time_limit", 1800)  # 30分
             else:
                 # 十分なデータがある場合
-                time_limit = model_params.get("time_limit", 60)
+                time_limit = model_params.get("time_limit", 1800)  # 30分
 
             # プロセス間の競合を避けるために一意の一時ディレクトリを作成
             temp_dir = tempfile.gettempdir()
@@ -249,23 +251,24 @@ class TimeSeriesPredictor:
             try:
                 # AutoGluonの厳格な要件を回避するための設定
                 # データサイズに関係なく動作するよう調整
-                
+
                 # AutoGluonの厳格な内部チェックを回避
                 # より安全な設定: データサイズに大きな余裕を持たせる
                 safe_margin = max(10, horizon * 2)  # 予測期間の2倍または10の大きい方
-                
+
                 if data_length >= horizon + safe_margin:
                     # 十分にデータがある場合のみ検証を実行
                     num_val_windows = 1
                     val_step_size = 1
                 else:
                     # 少しでも不安がある場合は検証を無効化
-                    num_val_windows = 0  
+                    num_val_windows = 0
                     val_step_size = 1
-                    logger.warning(f"安全のため検証を無効化: data_length={data_length}, horizon={horizon}, required_margin={safe_margin}")
-                
+                    logger.warning(
+                        f"安全のため検証を無効化: data_length={data_length}, horizon={horizon}, required_margin={safe_margin}")
+
                 logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size={val_step_size}")
-                
+
                 # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
                 fit_kwargs = {
                     "train_data": time_series_data,
@@ -276,11 +279,11 @@ class TimeSeriesPredictor:
                     "skip_model_selection": False,
                     "excluded_model_types": ["Naive"],
                 }
-                
+
                 # num_val_windows=0の場合はtuning_dataを明示的に指定
                 if num_val_windows == 0:
                     fit_kwargs["tuning_data"] = time_series_data
-                
+
                 predictor.fit(**fit_kwargs)
                 logger.info("AutoGluon fit が完了しました")
             except Exception as fit_error:
@@ -312,7 +315,7 @@ class TimeSeriesPredictor:
                         "Chronos": {},
                     }
                     retry_time_limit = time_limit
-                
+
                 # フォールバック時も同様の修正を適用
                 retry_fit_kwargs = {
                     "train_data": time_series_data,
@@ -323,7 +326,7 @@ class TimeSeriesPredictor:
                     "hyperparameters": retry_hyperparameters,
                     "tuning_data": time_series_data  # num_val_windows=0エラーを回避
                 }
-                
+
                 predictor.fit(**retry_fit_kwargs)
                 logger.info("再試行での AutoGluon fit が完了しました")
 
@@ -385,9 +388,9 @@ class TimeSeriesPredictor:
             try:
                 # モックの場合と実際のライブラリの場合で処理を分ける
                 if (
-                    hasattr(forecast_result, "item_ids")
-                    and hasattr(forecast_result, "columns")
-                    and hasattr(forecast_result.columns, "levels")
+                        hasattr(forecast_result, "item_ids")
+                        and hasattr(forecast_result, "columns")
+                        and hasattr(forecast_result.columns, "levels")
                 ):
                     # AutoGluon.timeseriesの場合
                     item_id = time_series_data.item_ids[0]
@@ -426,8 +429,8 @@ class TimeSeriesPredictor:
                                 for q in [0.05, 0.95]:
                                     try:
                                         if (
-                                            time_series_data.item_ids[0]
-                                            in forecast_quantiles
+                                                time_series_data.item_ids[0]
+                                                in forecast_quantiles
                                         ):
                                             item_id = time_series_data.item_ids[0]
                                         else:

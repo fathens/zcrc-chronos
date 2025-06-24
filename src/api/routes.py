@@ -4,12 +4,16 @@ APIルーティングを定義するモジュール
 
 import datetime
 import os
+import uuid
+import asyncio
 from typing import Any, Dict, List, Optional, Tuple
+from enum import Enum
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, BackgroundTasks
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
@@ -44,6 +48,12 @@ config = load_config()
 
 # APIルーターの作成
 router = APIRouter()
+
+# 非同期タスク管理用のグローバル辞書
+prediction_tasks: Dict[str, "PredictionResult"] = {}
+
+# ThreadPoolExecutor for running prediction tasks
+executor = ThreadPoolExecutor(max_workers=4)
 
 
 # リクエスト/レスポンスモデル
@@ -248,6 +258,52 @@ class ModelInfo(BaseModel):
     parameters: Dict[str, Any]
 
 
+class PredictionStatus(str, Enum):
+    """予測ステータス"""
+    PENDING = "pending"
+    RUNNING = "running" 
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class AsyncPredictionRequest(BaseModel):
+    """非同期ゼロショット予測リクエストモデル"""
+    
+    timestamp: List[datetime.datetime]
+    values: List[float]
+    forecast_until: datetime.datetime
+    model_name: Optional[str] = "chronos_default"
+    model_params: Optional[Dict[str, Any]] = None
+
+    @field_validator("values")
+    def validate_values_length(cls, v, info):
+        data = info.data
+        if "timestamp" in data and len(data["timestamp"]) != len(v):
+            raise ValueError("timestampとvaluesの長さが一致しません")
+        return v
+
+
+class AsyncPredictionResponse(BaseModel):
+    """非同期予測開始レスポンス"""
+    
+    task_id: str
+    status: PredictionStatus
+    message: str
+
+
+class PredictionResult(BaseModel):
+    """予測結果モデル"""
+    
+    task_id: str
+    status: PredictionStatus
+    progress: Optional[float] = None
+    message: Optional[str] = None
+    result: Optional[PredictionResponse] = None
+    error: Optional[str] = None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+
 # モデル一覧エンドポイント
 @router.get("/models", response_model=List[ModelInfo], tags=["models"])
 async def get_models():
@@ -414,6 +470,168 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
         raise HTTPException(
             status_code=500, detail="ゼロショット予測処理に失敗しました: " + str(e)
         )
+
+
+def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
+    """バックグラウンドで予測を実行する関数"""
+    try:
+        # タスクステータスを実行中に更新
+        prediction_tasks[task_id].status = PredictionStatus.RUNNING
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        prediction_tasks[task_id].message = "予測処理を開始しました"
+        
+        logger.info(f"タスク {task_id} の予測処理を開始します")
+
+        # 時系列データの正規化
+        normalized_timestamps, normalized_values = normalize_time_series_data(
+            request.timestamp, request.values, interpolation_method="auto"
+        )
+
+        # 最後のタイムスタンプを取得
+        latest_timestamp = max(normalized_timestamps)
+
+        # タイムスタンプの間隔を計算
+        if len(normalized_timestamps) >= 2:
+            delta = normalized_timestamps[1] - normalized_timestamps[0]
+        else:
+            raise ValueError("予測には少なくとも2つのデータポイントが必要です")
+
+        # 予測期間の計算
+        time_difference = request.forecast_until - latest_timestamp
+
+        if delta.total_seconds() <= 0:
+            raise ValueError("タイムスタンプの間隔が正しくありません")
+
+        prediction_points = int(time_difference.total_seconds() / delta.total_seconds())
+
+        if prediction_points <= 0:
+            raise ValueError("予測時点が最新のデータポイント以前です")
+
+        logger.info(f"タスク {task_id}: 予測ポイント数: {prediction_points}")
+
+        # 進捗更新: 前処理完了
+        prediction_tasks[task_id].progress = 0.2
+        prediction_tasks[task_id].message = "データ前処理が完了しました"
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+
+        # 予測モデルの初期化
+        predictor = TimeSeriesPredictor(
+            model_name=request.model_name, model_params=request.model_params
+        )
+
+        # 進捗更新: モデル初期化完了
+        prediction_tasks[task_id].progress = 0.3
+        prediction_tasks[task_id].message = "モデル初期化が完了しました"
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+
+        # ゼロショット予測の実行
+        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+            timestamp=normalized_timestamps,
+            values=normalized_values,
+            horizon=prediction_points,
+        )
+
+        # 進捗更新: 予測完了
+        prediction_tasks[task_id].progress = 0.9
+        prediction_tasks[task_id].message = "予測計算が完了しました"
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+
+        # レスポンスを作成
+        result = PredictionResponse(
+            forecast_timestamp=forecast_timestamps,
+            forecast_values=forecast_values,
+            model_name=request.model_name,
+            confidence_intervals=metadata.get("confidence_intervals"),
+            metrics=metadata.get("metrics"),
+        )
+
+        # タスク完了
+        prediction_tasks[task_id].status = PredictionStatus.COMPLETED
+        prediction_tasks[task_id].progress = 1.0
+        prediction_tasks[task_id].result = result
+        prediction_tasks[task_id].message = "予測処理が正常に完了しました"
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+
+        logger.info(f"タスク {task_id} の予測処理が正常に完了しました")
+
+    except Exception as e:
+        # エラー処理
+        error_msg = f"予測処理中にエラーが発生しました: {str(e)}"
+        logger.error(f"タスク {task_id}: {error_msg}")
+        
+        prediction_tasks[task_id].status = PredictionStatus.FAILED
+        prediction_tasks[task_id].error = error_msg
+        prediction_tasks[task_id].message = "予測処理に失敗しました"
+        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+
+
+# 非同期ゼロショット予測開始エンドポイント
+@router.post("/predict_zero_shot_async", response_model=AsyncPredictionResponse)
+async def predict_zero_shot_async(request: AsyncPredictionRequest, background_tasks: BackgroundTasks):
+    """
+    非同期でゼロショット予測を開始する
+    
+    長時間実行される予測処理を非同期で開始し、task_idを返します。
+    予測の進捗や結果は別のエンドポイントでポーリングして取得できます。
+    """
+    try:
+        # 一意のタスクIDを生成
+        task_id = str(uuid.uuid4())
+        
+        # タスクを初期化
+        now = datetime.datetime.utcnow()
+        prediction_tasks[task_id] = PredictionResult(
+            task_id=task_id,
+            status=PredictionStatus.PENDING,
+            progress=0.0,
+            message="予測タスクが開始されました",
+            created_at=now,
+            updated_at=now
+        )
+        
+        # バックグラウンドタスクとして予測処理を開始
+        background_tasks.add_task(run_prediction_task, task_id, request)
+        
+        logger.info(f"非同期予測タスクを開始しました: {task_id}")
+        
+        return AsyncPredictionResponse(
+            task_id=task_id,
+            status=PredictionStatus.PENDING,
+            message="予測タスクが正常に開始されました"
+        )
+        
+    except Exception as e:
+        logger.error(f"非同期予測タスクの開始に失敗しました: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"非同期予測タスクの開始に失敗しました: {str(e)}"
+        )
+
+
+# 予測タスクのステータス確認エンドポイント
+@router.get("/prediction_status/{task_id}", response_model=PredictionResult)
+async def get_prediction_status(task_id: str):
+    """
+    予測タスクのステータスと結果を取得する
+    
+    task_idに基づいて予測の進捗状況、結果、またはエラー情報を返します。
+    """
+    if task_id not in prediction_tasks:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"タスクが見つかりません: {task_id}"
+        )
+    
+    return prediction_tasks[task_id]
+
+
+# 予測タスクの一覧取得エンドポイント
+@router.get("/prediction_tasks", response_model=List[PredictionResult])
+async def get_prediction_tasks():
+    """
+    すべての予測タスクの一覧を取得する
+    """
+    return list(prediction_tasks.values())
 
 
 def normalize_time_series_data(

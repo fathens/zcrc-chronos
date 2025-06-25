@@ -219,9 +219,43 @@ class TimeSeriesPredictor:
                 f"target_mean={target_mean:.4f}, target_std={target_std:.4f}"
             )
 
+            # 時系列の頻度を推論して設定
+            # 時間間隔から頻度を決定
+            if delta == pd.Timedelta(hours=1):
+                freq = "h"  # 1時間
+            elif delta == pd.Timedelta(minutes=1):
+                freq = "min"  # 1分
+            elif delta == pd.Timedelta(days=1):
+                freq = "D"  # 1日
+            elif delta == pd.Timedelta(minutes=30):
+                freq = "30min"  # 30分
+            elif delta == pd.Timedelta(minutes=15):
+                freq = "15min"  # 15分
+            else:
+                # その他の間隔は秒数から推論
+                total_seconds = int(delta.total_seconds())
+                if total_seconds >= 86400:  # 1日以上
+                    freq = f"{total_seconds // 86400}D"
+                elif total_seconds >= 3600:  # 1時間以上
+                    freq = f"{total_seconds // 3600}h"
+                elif total_seconds >= 60:  # 1分以上
+                    freq = f"{total_seconds // 60}min"
+                else:
+                    freq = f"{total_seconds}s"
+            
+            logger.info(f"推論された時系列頻度: {freq}")
+
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
             )
+            
+            # 頻度を明示的に設定
+            try:
+                time_series_data = time_series_data.convert_frequency(freq=freq)
+                logger.info(f"時系列データの頻度を {freq} に設定しました")
+            except Exception as e:
+                logger.warning(f"頻度設定に失敗、デフォルトを使用: {e}")
+                # 頻度設定に失敗した場合はそのまま続行
 
             # AutoGluon-TimeSeries の設定
             preset = model_params.get("preset", "medium_quality")
@@ -520,7 +554,15 @@ class TimeSeriesPredictor:
 
         except Exception as e:
             logger.error(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
-            raise ValueError(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
+            
+            # データポイントが非常に少ない場合（5点未満）はエラーにする
+            if len(values) < 5:
+                error_msg = f"データポイントが不十分です（{len(values)}点）。AutoGluonを使用した時系列予測には最低5つのデータポイントが必要です。"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            else:
+                # データポイントが十分にある場合は元のエラーを投げる
+                raise ValueError(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
 
     def save_model(self, path: str) -> None:
         """

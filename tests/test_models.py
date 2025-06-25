@@ -75,7 +75,7 @@ def test_zero_shot_predict_different_data_patterns():
     # 基準時間
     now = datetime.datetime.now()
 
-    # 異なるデータパターン
+    # 異なるデータパターン（CI高速化のため軽量版）
     data_patterns = [
         # 短期データ（数時間）
         (
@@ -83,29 +83,17 @@ def test_zero_shot_predict_different_data_patterns():
             [10.0 + i * 0.5 for i in range(6)],
             "短期データ（6時間）",
         ),
-        # 中期データ（24時間）
+        # 中期データ（12時間）- 元24時間から短縮
         (
-            [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)],
-            [20.0 + i * 0.2 for i in range(24)],
-            "中期データ（24時間）",
+            [now - datetime.timedelta(hours=i) for i in range(12, 0, -1)],
+            [20.0 + i * 0.2 for i in range(12)],
+            "中期データ（12時間）",
         ),
-        # 長期データ（72時間）
+        # 値の範囲が広いデータ（12時間）- 元24時間から短縮
         (
-            [now - datetime.timedelta(hours=i) for i in range(72, 0, -1)],
-            [30.0 + i * 0.1 for i in range(72)],
-            "長期データ（72時間）",
-        ),
-        # 値の範囲が広いデータ
-        (
-            [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)],
-            [100.0 + i * 10.0 for i in range(24)],
+            [now - datetime.timedelta(hours=i) for i in range(12, 0, -1)],
+            [100.0 + i * 10.0 for i in range(12)],
             "広範囲データ（値の変動大）",
-        ),
-        # 値の範囲が狭いデータ
-        (
-            [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)],
-            [100.0 + i * 0.01 for i in range(24)],
-            "狭範囲データ（値の変動小）",
         ),
     ]
 

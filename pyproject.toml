@@ -42,6 +42,21 @@ exclude = [
     "venv",
 ]
 
-[tool.pytest]
-testpaths = ["tests"]
-python_files = "test_*.py"
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+# scriptsディレクトリをテスト対象から除外
+norecursedirs = [
+    "scripts",
+    "*.egg",
+    ".eggs",
+    "dist", 
+    "build",
+    "docs",
+    ".tox",
+    ".git",
+    "__pycache__"
+]

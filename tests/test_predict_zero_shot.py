@@ -25,7 +25,7 @@ class TestPredictZeroShotValidInputs:
         # 24時間分のテストデータを作成
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(23, -1, -1)
         ]
         values = [10.0 + i * 0.1 + (i % 3) * 0.05 for i in range(24)]
@@ -40,13 +40,13 @@ class TestPredictZeroShotValidInputs:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         assert "forecast_timestamp" in data
         assert "forecast_values" in data
         assert "model_name" in data
         assert data["model_name"] == "chronos_default"
-        
+
         # 予測値の数が適切であることを確認
         assert len(data["forecast_timestamp"]) > 0
         assert len(data["forecast_values"]) > 0
@@ -71,7 +71,7 @@ class TestPredictZeroShotValidInputs:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         assert len(data["forecast_timestamp"]) > 0
         assert len(data["forecast_values"]) > 0
@@ -80,7 +80,7 @@ class TestPredictZeroShotValidInputs:
         """異なる予測期間でのテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         base_timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(11, -1, -1)
         ]
         base_values = [10.0 + i * 0.1 for i in range(12)]
@@ -136,7 +136,7 @@ class TestPredictZeroShotValidInputs:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         assert len(data["forecast_timestamp"]) > 0
         assert len(data["forecast_values"]) > 0
@@ -145,7 +145,7 @@ class TestPredictZeroShotValidInputs:
         """モデルパラメータを指定したテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
@@ -161,7 +161,7 @@ class TestPredictZeroShotValidInputs:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         assert data["model_name"] == "chronos_default"
 
@@ -312,7 +312,7 @@ class TestPredictZeroShotEdgeCases:
         """信頼区間がレスポンスに含まれることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
@@ -327,7 +327,7 @@ class TestPredictZeroShotEdgeCases:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         # 信頼区間が含まれていることを確認（モックでは含まれる）
         assert "confidence_intervals" in data
@@ -339,7 +339,7 @@ class TestPredictZeroShotEdgeCases:
         """評価指標がレスポンスに含まれることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
@@ -354,7 +354,7 @@ class TestPredictZeroShotEdgeCases:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         # 評価指標が含まれていることを確認
         assert "metrics" in data
@@ -370,7 +370,7 @@ class TestPredictZeroShotEdgeCases:
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         # 100データポイント
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(99, -1, -1)
         ]
         values = [10.0 + i * 0.01 + (i % 10) * 0.1 for i in range(100)]
@@ -385,7 +385,7 @@ class TestPredictZeroShotEdgeCases:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         assert len(data["forecast_timestamp"]) > 0
         assert len(data["forecast_values"]) > 0
@@ -394,7 +394,7 @@ class TestPredictZeroShotEdgeCases:
         """予測タイムスタンプが正しい順序になっていることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [10.0 + i for i in range(6)]
@@ -409,13 +409,13 @@ class TestPredictZeroShotEdgeCases:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
         forecast_timestamps = [
             datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
             for ts in data["forecast_timestamp"]
         ]
-        
+
         # タイムスタンプが昇順になっていることを確認
         for i in range(1, len(forecast_timestamps)):
             assert forecast_timestamps[i] > forecast_timestamps[i-1]
@@ -424,7 +424,7 @@ class TestPredictZeroShotEdgeCases:
         """極端な値でのテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [1e6, 1e-6, 1e6, 1e-6, 1e6, 1e-6]  # 極端に大きな値と小さな値
@@ -451,7 +451,7 @@ class TestPredictZeroShotIntegration:
         # モックの設定
         mock_predictor = Mock()
         mock_predictor_class.return_value = mock_predictor
-        
+
         # モックの戻り値を設定
         mock_forecast_timestamps = [
             datetime.datetime(2023, 1, 1, 13, 0, 0),
@@ -466,7 +466,7 @@ class TestPredictZeroShotIntegration:
             },
             "metrics": {"mse": 0.1, "mae": 0.05}
         }
-        
+
         mock_predictor.zero_shot_predict.return_value = (
             mock_forecast_timestamps,
             mock_forecast_values,
@@ -491,14 +491,14 @@ class TestPredictZeroShotIntegration:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         # モックが正しく呼び出されたことを確認
         mock_predictor_class.assert_called_once_with(
             model_name="chronos_default",
             model_params=None
         )
         mock_predictor.zero_shot_predict.assert_called_once()
-        
+
         # レスポンスの検証
         data = response.json()
         assert len(data["forecast_values"]) == 3
@@ -540,7 +540,7 @@ class TestPredictZeroShotIntegration:
         """リクエストモデルのバリデーションをテスト"""
         # ZeroShotPredictionRequestの直接テスト
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
-        
+
         # 正常なリクエスト
         valid_request = ZeroShotPredictionRequest(
             timestamp=[now - datetime.timedelta(hours=1), now],
@@ -565,7 +565,7 @@ class TestPredictZeroShotIntegration:
         """レスポンス形式の検証"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat() 
+            (now - datetime.timedelta(hours=i)).isoformat()
             for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
@@ -580,37 +580,37 @@ class TestPredictZeroShotIntegration:
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         assert response.status_code == 200
-        
+
         data = response.json()
-        
+
         # 必須フィールドの存在確認
         required_fields = [
-            "forecast_timestamp", 
-            "forecast_values", 
+            "forecast_timestamp",
+            "forecast_values",
             "model_name"
         ]
         for field in required_fields:
             assert field in data
-            
+
         # オプションフィールドの存在確認
         optional_fields = ["confidence_intervals", "metrics"]
         for field in optional_fields:
             assert field in data  # キーは存在するがNoneの可能性もある
-            
+
         # データ型の確認
         assert isinstance(data["forecast_timestamp"], list)
         assert isinstance(data["forecast_values"], list)
         assert isinstance(data["model_name"], str)
-        
+
         # リストの長さが一致することを確認
         assert len(data["forecast_timestamp"]) == len(data["forecast_values"])
-        
+
         # タイムスタンプの形式確認（ISO形式）
         for ts in data["forecast_timestamp"]:
             assert isinstance(ts, str)
             # ISO形式のパースが可能であることを確認
             datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
-            
+
         # 予測値が数値であることを確認
         for value in data["forecast_values"]:
             assert isinstance(value, (int, float))

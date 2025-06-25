@@ -39,8 +39,6 @@ def test_zero_shot_predict():
     predictor = TimeSeriesPredictor()
 
     # 時系列データの作成
-    import datetime
-
     now = datetime.datetime.now()
     # 過去24時間分のダミー時系列データを生成
     timestamps = [now - datetime.timedelta(hours=i) for i in range(24, 0, -1)]

@@ -209,7 +209,9 @@ class TimeSeriesPredictor:
             target_mean = df['target'].mean()
             target_std = df['target'].std()
             logger.info(
-                f"データフレーム統計: shape={df.shape}, target_mean={target_mean:.4f}, target_std={target_std:.4f}")
+                f"データフレーム統計: shape={df.shape}, "
+                f"target_mean={target_mean:.4f}, target_std={target_std:.4f}"
+            )
 
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
@@ -265,7 +267,9 @@ class TimeSeriesPredictor:
                     num_val_windows = 0
                     val_step_size = 1
                     logger.warning(
-                        f"安全のため検証を無効化: data_length={data_length}, horizon={horizon}, required_margin={safe_margin}")
+                        f"安全のため検証を無効化: data_length={data_length}, "
+                        f"horizon={horizon}, required_margin={safe_margin}"
+                    )
 
                 logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size={val_step_size}")
 

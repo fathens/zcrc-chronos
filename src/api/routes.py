@@ -5,15 +5,14 @@ APIルーティングを定義するモジュール
 import datetime
 import os
 import uuid
-import asyncio
-from typing import Any, Dict, List, Optional, Tuple
-from enum import Enum
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import yaml
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
@@ -38,7 +37,7 @@ def load_config():
         with open(CONFIG_PATH, "r") as f:
             return yaml.safe_load(f)
     except Exception as e:
-        logger.error("設定ファイルの読み込みに失敗しました: " + str(e))
+        logger.error(f"設定ファイルの読み込みに失敗しました: {e}")
         raise HTTPException(
             status_code=500, detail="サーバー設定の読み込みに失敗しました"
         )
@@ -261,7 +260,7 @@ class ModelInfo(BaseModel):
 class PredictionStatus(str, Enum):
     """予測ステータス"""
     PENDING = "pending"
-    RUNNING = "running" 
+    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -328,7 +327,7 @@ async def get_models():
 
         return models
     except Exception as e:
-        logger.error("モデル情報の取得に失敗しました: " + str(e))
+        logger.error(f"モデル情報の取得に失敗しました: {e}")
         raise HTTPException(status_code=500, detail="モデル情報の取得に失敗しました")
 
 
@@ -428,19 +427,14 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "予測時点が最新のデータポイント以前です。"
-                    "予測時点: "
-                    + str(request.forecast_until)
-                    + ", 最新のデータポイント: "
-                    + str(latest_timestamp)
+                    f"予測時点が最新のデータポイント以前です。"
+                    f"予測時点: {request.forecast_until}, "
+                    f"最新のデータポイント: {latest_timestamp}"
                 ),
             )
 
         logger.info(
-            "予測ポイント数: "
-            + str(prediction_points)
-            + ", 予測時点: "
-            + str(request.forecast_until)
+            f"予測ポイント数: {prediction_points}, 予測時点: {request.forecast_until}"
         )
 
         # 予測モデルの初期化
@@ -466,9 +460,9 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
 
         return response
     except Exception as e:
-        logger.error("ゼロショット予測処理に失敗しました: " + str(e))
+        logger.error(f"ゼロショット予測処理に失敗しました: {e}")
         raise HTTPException(
-            status_code=500, detail="ゼロショット予測処理に失敗しました: " + str(e)
+            status_code=500, detail=f"ゼロショット予測処理に失敗しました: {e}"
         )
 
 
@@ -690,14 +684,14 @@ def normalize_time_series_data(
     # 補間方法の検証
     if interpolation_method not in valid_methods:
         logger.warning(
-            "無効な補間方法: " + interpolation_method + ". 'auto'に切り替えます。"
+            f"無効な補間方法: {interpolation_method}. 'auto'に切り替えます。"
         )
         interpolation_method = "auto"
 
     # 自動補間方法選択
     if interpolation_method == "auto":
         interpolation_method = _determine_best_interpolation_method(timestamps, values)
-        logger.info("自動選択された補間方法: " + interpolation_method)
+        logger.info(f"自動選択された補間方法: {interpolation_method}")
 
     # pandasのDataFrameを作成
     df = pd.DataFrame({"timestamp": timestamps, "value": values})
@@ -787,11 +781,8 @@ def normalize_time_series_data(
     except Exception as e:
         # 補間に失敗した場合はエラーをログに記録し、線形補間にフォールバック
         logger.error(
-            "補間方法 '"
-            + interpolation_method
-            + "' でエラーが発生しました: "
-            + str(e)
-            + ". 線形補間を使用します。"
+            f"補間方法 '{interpolation_method}' でエラーが発生しました: {e}. "
+            f"線形補間を使用します。"
         )
         resampled_df = df.reindex(new_timestamps).interpolate(method="linear")
         return new_timestamps, resampled_df["value"].tolist()

@@ -106,16 +106,29 @@ pip install autogluon.timeseries>=1.3.0
 - これは技術的制限であり、実際のAPI機能には影響しません
 
 ### コード品質チェック
+
+**重要**: コミット前に必ず以下の全てのチェックを実行し、すべてエラーなしで通ることを確認してください。
+
 ```bash
-# コードフォーマット
-black src tests
+# 1. コードフォーマット（自動修正）
+python -m black .
+python -m isort .
 
-# コードスタイルチェック
-flake8 src tests
+# 2. フォーマット確認（変更が必要な場合はエラー）
+python -m black --check .
+python -m isort --check-only .
 
-# インポート文整理
-isort src tests
+# 3. コードスタイルチェック（エラーが出た場合は修正が必要）
+python -m flake8 .
+
+# 4. テスト実行（すべてのテストが通ることを確認）
+python -m pytest tests/ -v
 ```
+
+**CI/CDパイプライン**: 
+- プルリクエスト作成時に上記のチェックが自動実行されます
+- すべてのチェックが通らない限りマージできません
+- コミット前にローカルで実行することを強く推奨します
 
 ### Dockerデプロイ
 ```bash

@@ -242,13 +242,13 @@ class TimeSeriesPredictor:
                     freq = f"{total_seconds // 60}min"
                 else:
                     freq = f"{total_seconds}s"
-            
+
             logger.info(f"推論された時系列頻度: {freq}")
 
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
             )
-            
+
             # 頻度を明示的に設定
             try:
                 time_series_data = time_series_data.convert_frequency(freq=freq)
@@ -554,10 +554,13 @@ class TimeSeriesPredictor:
 
         except Exception as e:
             logger.error(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
-            
+
             # データポイントが非常に少ない場合（5点未満）はエラーにする
             if len(values) < 5:
-                error_msg = f"データポイントが不十分です（{len(values)}点）。AutoGluonを使用した時系列予測には最低5つのデータポイントが必要です。"
+                error_msg = (
+                    f"データポイントが不十分です（{len(values)}点）。"
+                    "AutoGluonを使用した時系列予測には最低5つのデータポイントが必要です。"
+                )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
             else:

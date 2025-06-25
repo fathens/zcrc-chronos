@@ -66,7 +66,7 @@ class TestPredictZeroShotValidInputs:
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
         # データポイントが不十分な場合は500エラーが期待される
         assert response.status_code == 500
-        
+
         data = response.json()
         assert "detail" in data
         assert "データポイントが不十分" in data["detail"]

@@ -1,11 +1,12 @@
 import datetime
-import sys
 import os
+import sys
 
 # プロジェクトのルートディレクトリをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.api.routes import normalize_time_series_data
+from src.api.routes import normalize_time_series_data  # noqa: E402
+
 
 def test_normalize_time_series_data_irregular_intervals():
     """
@@ -32,7 +33,9 @@ def test_normalize_time_series_data_irregular_intervals():
     print(f"正規化後のデータポイント数: {len(normalized_timestamps)}")
 
     # 正規化後のデータ点が元のデータ点以上であることを確認
-    assert len(normalized_timestamps) >= len(timestamps), "正規化後のデータポイント数が元のデータポイント数より少なくなっています"
+    assert len(normalized_timestamps) >= len(
+        timestamps
+    ), "正規化後のデータポイント数が元のデータポイント数より少なくなっています"
     print("テスト成功: 正規化後のデータポイント数が元のデータポイント数以上です")
 
     # 均等な間隔かどうかを検証
@@ -45,6 +48,7 @@ def test_normalize_time_series_data_irregular_intervals():
     print(f"最大時間間隔: {max_diff}秒, 最小時間間隔: {min_diff}秒")
     assert max_diff - min_diff < 1.0, "時間間隔が均等ではありません"
     print("テスト成功: 時間間隔が均等です")
+
 
 if __name__ == "__main__":
     test_normalize_time_series_data_irregular_intervals()

@@ -40,9 +40,9 @@ class TimeSeriesPredictor:
     """
 
     def __init__(
-            self,
-            model_name: str = "chronos_default",
-            model_params: Optional[Dict[str, Any]] = None,
+        self,
+        model_name: str = "chronos_default",
+        model_params: Optional[Dict[str, Any]] = None,
     ):
         """
         初期化
@@ -72,7 +72,7 @@ class TimeSeriesPredictor:
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
 
     def zero_shot_predict(
-            self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
+        self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
@@ -128,7 +128,10 @@ class TimeSeriesPredictor:
                 raise ValueError(error_msg)
 
             if len(timestamp) != len(values):
-                error_msg = f"timestampとvaluesの長さが一致しません: {len(timestamp)} vs {len(values)}"
+                error_msg = (
+                    f"timestampとvaluesの長さが一致しません: "
+                    f"{len(timestamp)} vs {len(values)}"
+                )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -144,14 +147,19 @@ class TimeSeriesPredictor:
 
             # 予測期間がデータサイズに対して大きすぎる場合の調整（柔軟な制限）
             # 短期予測と長期予測の両方に対応
-            max_safe_horizon = max(horizon, data_length // 2)  # 要求された予測期間かデータサイズの50%の大きい方
+            max_safe_horizon = max(
+                horizon, data_length // 2
+            )  # 要求された予測期間かデータサイズの50%の大きい方
             if horizon > max_safe_horizon:
                 original_horizon = horizon
                 horizon = max_safe_horizon
-                logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
+                logger.warning(
+                    f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}"
+                )
 
             # AutoGluonの厳格な最小要件を回避
-            # 実際の制約: train_data length >= prediction_length + num_val_windows * val_step_size + margin
+            # 実際の制約: train_data length >= prediction_length +
+            # num_val_windows * val_step_size + margin
             autogluon_min_required = horizon + 5  # より現実的な最小要件
 
             if data_length < autogluon_min_required:
@@ -164,7 +172,8 @@ class TimeSeriesPredictor:
                 else:
                     horizon = 1  # 最後の手段
                 logger.warning(
-                    f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)")
+                    f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)"
+                )
 
             logger.info(f"調整後の予測期間: {horizon}")
 
@@ -203,8 +212,8 @@ class TimeSeriesPredictor:
                 df["timestamp"] = df["timestamp"].dt.tz_localize(None)
 
             # データフレームの基本統計をログ出力
-            target_mean = df['target'].mean()
-            target_std = df['target'].std()
+            target_mean = df["target"].mean()
+            target_std = df["target"].std()
             logger.info(
                 f"データフレーム統計: shape={df.shape}, "
                 f"target_mean={target_mean:.4f}, target_std={target_std:.4f}"
@@ -222,7 +231,9 @@ class TimeSeriesPredictor:
                 # 非常に小さなデータセットの場合
                 preset = "medium_quality"
                 time_limit = 30  # 時間制限を短く
-                logger.warning(f"データサイズが小さいため設定を調整します: data_length={data_length}")
+                logger.warning(
+                    f"データサイズが小さいため設定を調整します: data_length={data_length}"
+                )
             elif data_length < 100:
                 # 小さなデータセットの場合
                 preset = "medium_quality"
@@ -236,7 +247,10 @@ class TimeSeriesPredictor:
             temp_model_dir = os.path.join(temp_dir, f"ag_ts_model_{uuid.uuid4().hex}")
             os.makedirs(temp_model_dir, exist_ok=True)
 
-            logger.info(f"AutoGluon設定: preset={preset}, time_limit={time_limit}, temp_dir={temp_model_dir}")
+            logger.info(
+                f"AutoGluon設定: preset={preset}, time_limit={time_limit}, "
+                f"temp_dir={temp_model_dir}"
+            )
 
             # AutoGluon-TimeSeries を使用した予測
             predictor = AutoGluonTSPredictor(
@@ -268,7 +282,10 @@ class TimeSeriesPredictor:
                         f"horizon={horizon}, required_margin={safe_margin}"
                     )
 
-                logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size={val_step_size}")
+                logger.info(
+                    f"検証設定: num_val_windows={num_val_windows}, "
+                    f"val_step_size={val_step_size}"
+                )
 
                 # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
                 fit_kwargs = {
@@ -325,7 +342,7 @@ class TimeSeriesPredictor:
                     "num_val_windows": 0,
                     "val_step_size": 1,
                     "hyperparameters": retry_hyperparameters,
-                    "tuning_data": time_series_data  # num_val_windows=0エラーを回避
+                    "tuning_data": time_series_data,  # num_val_windows=0エラーを回避
                 }
 
                 predictor.fit(**retry_fit_kwargs)
@@ -389,9 +406,9 @@ class TimeSeriesPredictor:
             try:
                 # モックの場合と実際のライブラリの場合で処理を分ける
                 if (
-                        hasattr(forecast_result, "item_ids")
-                        and hasattr(forecast_result, "columns")
-                        and hasattr(forecast_result.columns, "levels")
+                    hasattr(forecast_result, "item_ids")
+                    and hasattr(forecast_result, "columns")
+                    and hasattr(forecast_result.columns, "levels")
                 ):
                     # AutoGluon.timeseriesの場合
                     item_id = time_series_data.item_ids[0]
@@ -430,8 +447,8 @@ class TimeSeriesPredictor:
                                 for q in [0.05, 0.95]:
                                     try:
                                         if (
-                                                time_series_data.item_ids[0]
-                                                in forecast_quantiles
+                                            time_series_data.item_ids[0]
+                                            in forecast_quantiles
                                         ):
                                             item_id = time_series_data.item_ids[0]
                                         else:
@@ -487,7 +504,8 @@ class TimeSeriesPredictor:
                 forecast_values = forecast_values[:horizon]
                 # 予測タイムスタンプも調整されたhorizonに合わせて再生成
                 forecast_timestamps = [
-                    latest_timestamp + delta * (i + 1) for i in range(len(forecast_values))
+                    latest_timestamp + delta * (i + 1)
+                    for i in range(len(forecast_values))
                 ]
                 # 信頼区間も同様に切り詰める
                 for key in confidence_intervals:

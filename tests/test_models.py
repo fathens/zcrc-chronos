@@ -539,7 +539,7 @@ def test_predictor_initialization_edge_cases():
         "nested": {"param": "value"},
         "list_param": [1, 2, 3],
         "bool_param": True,
-        "float_param": 3.14
+        "float_param": 3.14,
     }
     predictor_complex = TimeSeriesPredictor(model_params=complex_params)
     assert predictor_complex.model_params == complex_params

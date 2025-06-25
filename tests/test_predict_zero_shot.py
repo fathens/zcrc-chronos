@@ -6,12 +6,10 @@ import datetime
 from unittest.mock import Mock, patch
 
 import pytest
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from src.api.routes import ZeroShotPredictionRequest, predict_zero_shot
+from src.api.routes import ZeroShotPredictionRequest
 from src.api.server import app
-from src.models.predictor import TimeSeriesPredictor
 
 # テストクライアントの初期化
 client = TestClient(app)
@@ -25,8 +23,7 @@ class TestPredictZeroShotValidInputs:
         # 24時間分のテストデータを作成
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(23, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(23, -1, -1)
         ]
         values = [10.0 + i * 0.1 + (i % 3) * 0.05 for i in range(24)]
         forecast_until = (now + datetime.timedelta(hours=12)).isoformat()
@@ -35,7 +32,7 @@ class TestPredictZeroShotValidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -55,10 +52,7 @@ class TestPredictZeroShotValidInputs:
     def test_minimal_data_points(self):
         """最小限のデータポイント（2点）での予測をテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
-        timestamps = [
-            (now - datetime.timedelta(hours=1)).isoformat(),
-            now.isoformat()
-        ]
+        timestamps = [(now - datetime.timedelta(hours=1)).isoformat(), now.isoformat()]
         values = [10.0, 11.0]
         forecast_until = (now + datetime.timedelta(hours=2)).isoformat()
 
@@ -66,7 +60,7 @@ class TestPredictZeroShotValidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -80,8 +74,7 @@ class TestPredictZeroShotValidInputs:
         """異なる予測期間でのテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         base_timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(11, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(11, -1, -1)
         ]
         base_values = [10.0 + i * 0.1 for i in range(12)]
 
@@ -91,7 +84,7 @@ class TestPredictZeroShotValidInputs:
             "timestamp": base_timestamps,
             "values": base_values,
             "forecast_until": forecast_until_short,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response_short = client.post("/api/v1/predict_zero_shot", json=request_short)
@@ -103,7 +96,7 @@ class TestPredictZeroShotValidInputs:
             "timestamp": base_timestamps,
             "values": base_values,
             "forecast_until": forecast_until_long,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response_long = client.post("/api/v1/predict_zero_shot", json=request_long)
@@ -122,7 +115,7 @@ class TestPredictZeroShotValidInputs:
             (now - datetime.timedelta(hours=7)).isoformat(),
             (now - datetime.timedelta(hours=5)).isoformat(),
             (now - datetime.timedelta(hours=2)).isoformat(),
-            now.isoformat()
+            now.isoformat(),
         ]
         values = [10.0, 12.0, 11.5, 13.0, 14.0]
         forecast_until = (now + datetime.timedelta(hours=6)).isoformat()
@@ -131,7 +124,7 @@ class TestPredictZeroShotValidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -145,8 +138,7 @@ class TestPredictZeroShotValidInputs:
         """モデルパラメータを指定したテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [10.0, 11.0, 12.0, 13.0, 14.0, 15.0]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
@@ -156,7 +148,7 @@ class TestPredictZeroShotValidInputs:
             "values": values,
             "forecast_until": forecast_until,
             "model_name": "chronos_default",
-            "model_params": {"seasonality_mode": "additive"}
+            "model_params": {"seasonality_mode": "additive"},
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -180,7 +172,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -193,7 +185,7 @@ class TestPredictZeroShotInvalidInputs:
         timestamps = [
             (now - datetime.timedelta(hours=2)).isoformat(),
             (now - datetime.timedelta(hours=1)).isoformat(),
-            now.isoformat()
+            now.isoformat(),
         ]
         values = [10.0, 11.0]  # 長さが一致しない
         forecast_until = (now + datetime.timedelta(hours=1)).isoformat()
@@ -202,7 +194,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -213,7 +205,7 @@ class TestPredictZeroShotInvalidInputs:
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
             (now - datetime.timedelta(hours=2)).isoformat(),
-            (now - datetime.timedelta(hours=1)).isoformat()
+            (now - datetime.timedelta(hours=1)).isoformat(),
         ]
         values = [10.0, 11.0]
         forecast_until = (now - datetime.timedelta(hours=3)).isoformat()  # 過去の時点
@@ -222,7 +214,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -240,7 +232,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -252,7 +244,7 @@ class TestPredictZeroShotInvalidInputs:
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
             now.isoformat(),
-            (now - datetime.timedelta(hours=1)).isoformat()  # 時系列が逆順
+            (now - datetime.timedelta(hours=1)).isoformat(),  # 時系列が逆順
         ]
         values = [10.0, 11.0]
         forecast_until = (now + datetime.timedelta(hours=1)).isoformat()
@@ -261,7 +253,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -276,7 +268,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": [],
             "values": [],
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -285,10 +277,7 @@ class TestPredictZeroShotInvalidInputs:
     def test_invalid_model_name(self):
         """無効なモデル名でのテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
-        timestamps = [
-            (now - datetime.timedelta(hours=1)).isoformat(),
-            now.isoformat()
-        ]
+        timestamps = [(now - datetime.timedelta(hours=1)).isoformat(), now.isoformat()]
         values = [10.0, 11.0]
         forecast_until = (now + datetime.timedelta(hours=1)).isoformat()
 
@@ -296,7 +285,7 @@ class TestPredictZeroShotInvalidInputs:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "invalid_model"
+            "model_name": "invalid_model",
         }
 
         # 無効なモデル名でも実行される（モデル内部で処理）
@@ -312,8 +301,7 @@ class TestPredictZeroShotEdgeCases:
         """信頼区間がレスポンスに含まれることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
@@ -322,7 +310,7 @@ class TestPredictZeroShotEdgeCases:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -339,8 +327,7 @@ class TestPredictZeroShotEdgeCases:
         """評価指標がレスポンスに含まれることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
@@ -349,7 +336,7 @@ class TestPredictZeroShotEdgeCases:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -360,7 +347,6 @@ class TestPredictZeroShotEdgeCases:
         assert "metrics" in data
         if data["metrics"] is not None:
             # 一般的な指標の存在を確認
-            possible_metrics = ["mse", "mae", "rmse", "mape"]
             metric_keys = data["metrics"].keys()
             # 少なくとも1つの指標が含まれていることを確認
             assert len(metric_keys) > 0
@@ -370,8 +356,7 @@ class TestPredictZeroShotEdgeCases:
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         # 100データポイント
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(99, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(99, -1, -1)
         ]
         values = [10.0 + i * 0.01 + (i % 10) * 0.1 for i in range(100)]
         forecast_until = (now + datetime.timedelta(hours=24)).isoformat()
@@ -380,7 +365,7 @@ class TestPredictZeroShotEdgeCases:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -394,8 +379,7 @@ class TestPredictZeroShotEdgeCases:
         """予測タイムスタンプが正しい順序になっていることをテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [10.0 + i for i in range(6)]
         forecast_until = (now + datetime.timedelta(hours=6)).isoformat()
@@ -404,7 +388,7 @@ class TestPredictZeroShotEdgeCases:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -418,14 +402,13 @@ class TestPredictZeroShotEdgeCases:
 
         # タイムスタンプが昇順になっていることを確認
         for i in range(1, len(forecast_timestamps)):
-            assert forecast_timestamps[i] > forecast_timestamps[i-1]
+            assert forecast_timestamps[i] > forecast_timestamps[i - 1]
 
     def test_extreme_values(self):
         """極端な値でのテスト"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [1e6, 1e-6, 1e6, 1e-6, 1e6, 1e-6]  # 極端に大きな値と小さな値
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
@@ -434,7 +417,7 @@ class TestPredictZeroShotEdgeCases:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -445,7 +428,7 @@ class TestPredictZeroShotEdgeCases:
 class TestPredictZeroShotIntegration:
     """統合テストとモック動作の検証"""
 
-    @patch('src.models.predictor.TimeSeriesPredictor')
+    @patch("src.models.predictor.TimeSeriesPredictor")
     def test_predictor_integration(self, mock_predictor_class):
         """TimeSeriesPredictorとの統合をテスト"""
         # モックの設定
@@ -456,29 +439,26 @@ class TestPredictZeroShotIntegration:
         mock_forecast_timestamps = [
             datetime.datetime(2023, 1, 1, 13, 0, 0),
             datetime.datetime(2023, 1, 1, 14, 0, 0),
-            datetime.datetime(2023, 1, 1, 15, 0, 0)
+            datetime.datetime(2023, 1, 1, 15, 0, 0),
         ]
         mock_forecast_values = [11.0, 11.5, 12.0]
         mock_metadata = {
             "confidence_intervals": {
                 "lower_95": [10.0, 10.5, 11.0],
-                "upper_95": [12.0, 12.5, 13.0]
+                "upper_95": [12.0, 12.5, 13.0],
             },
-            "metrics": {"mse": 0.1, "mae": 0.05}
+            "metrics": {"mse": 0.1, "mae": 0.05},
         }
 
         mock_predictor.zero_shot_predict.return_value = (
             mock_forecast_timestamps,
             mock_forecast_values,
-            mock_metadata
+            mock_metadata,
         )
 
         # テストデータ
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
-        timestamps = [
-            (now - datetime.timedelta(hours=1)).isoformat(),
-            now.isoformat()
-        ]
+        timestamps = [(now - datetime.timedelta(hours=1)).isoformat(), now.isoformat()]
         values = [10.0, 10.5]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
 
@@ -486,7 +466,7 @@ class TestPredictZeroShotIntegration:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -494,8 +474,7 @@ class TestPredictZeroShotIntegration:
 
         # モックが正しく呼び出されたことを確認
         mock_predictor_class.assert_called_once_with(
-            model_name="chronos_default",
-            model_params=None
+            model_name="chronos_default", model_params=None
         )
         mock_predictor.zero_shot_predict.assert_called_once()
 
@@ -508,20 +487,19 @@ class TestPredictZeroShotIntegration:
         assert data["metrics"]["mse"] == 0.1
         assert data["metrics"]["mae"] == 0.05
 
-    @patch('src.models.predictor.TimeSeriesPredictor')
+    @patch("src.models.predictor.TimeSeriesPredictor")
     def test_predictor_exception_handling(self, mock_predictor_class):
         """Predictorで例外が発生した場合のハンドリングをテスト"""
         # モックで例外を発生させる
         mock_predictor = Mock()
         mock_predictor_class.return_value = mock_predictor
-        mock_predictor.zero_shot_predict.side_effect = Exception("Mock prediction error")
+        mock_predictor.zero_shot_predict.side_effect = Exception(
+            "Mock prediction error"
+        )
 
         # テストデータ
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
-        timestamps = [
-            (now - datetime.timedelta(hours=1)).isoformat(),
-            now.isoformat()
-        ]
+        timestamps = [(now - datetime.timedelta(hours=1)).isoformat(), now.isoformat()]
         values = [10.0, 10.5]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
 
@@ -529,7 +507,7 @@ class TestPredictZeroShotIntegration:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -546,7 +524,7 @@ class TestPredictZeroShotIntegration:
             timestamp=[now - datetime.timedelta(hours=1), now],
             values=[10.0, 11.0],
             forecast_until=now + datetime.timedelta(hours=1),
-            model_name="chronos_default"
+            model_name="chronos_default",
         )
         assert valid_request.model_name == "chronos_default"
         assert len(valid_request.timestamp) == 2
@@ -558,15 +536,14 @@ class TestPredictZeroShotIntegration:
                 timestamp=[now - datetime.timedelta(hours=1), now],
                 values=[10.0],  # 長さが一致しない
                 forecast_until=now + datetime.timedelta(hours=1),
-                model_name="chronos_default"
+                model_name="chronos_default",
             )
 
     def test_response_format_validation(self):
         """レスポンス形式の検証"""
         now = datetime.datetime(2023, 1, 1, 12, 0, 0)
         timestamps = [
-            (now - datetime.timedelta(hours=i)).isoformat()
-            for i in range(5, -1, -1)
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(5, -1, -1)
         ]
         values = [10.0 + i * 0.1 for i in range(6)]
         forecast_until = (now + datetime.timedelta(hours=3)).isoformat()
@@ -575,7 +552,7 @@ class TestPredictZeroShotIntegration:
             "timestamp": timestamps,
             "values": values,
             "forecast_until": forecast_until,
-            "model_name": "chronos_default"
+            "model_name": "chronos_default",
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
@@ -584,11 +561,7 @@ class TestPredictZeroShotIntegration:
         data = response.json()
 
         # 必須フィールドの存在確認
-        required_fields = [
-            "forecast_timestamp",
-            "forecast_values",
-            "model_name"
-        ]
+        required_fields = ["forecast_timestamp", "forecast_values", "model_name"]
         for field in required_fields:
             assert field in data
 

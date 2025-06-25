@@ -259,6 +259,7 @@ class ModelInfo(BaseModel):
 
 class PredictionStatus(str, Enum):
     """予測ステータス"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -561,7 +562,9 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
 
 # 非同期ゼロショット予測開始エンドポイント
 @router.post("/predict_zero_shot_async", response_model=AsyncPredictionResponse)
-async def predict_zero_shot_async(request: AsyncPredictionRequest, background_tasks: BackgroundTasks):
+async def predict_zero_shot_async(
+    request: AsyncPredictionRequest, background_tasks: BackgroundTasks
+):
     """
     非同期でゼロショット予測を開始する
 
@@ -580,7 +583,7 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest, background_ta
             progress=0.0,
             message="予測タスクが開始されました",
             created_at=now,
-            updated_at=now
+            updated_at=now,
         )
 
         # バックグラウンドタスクとして予測処理を開始
@@ -590,14 +593,13 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest, background_ta
         return AsyncPredictionResponse(
             task_id=task_id,
             status=PredictionStatus.PENDING,
-            message="予測タスクが正常に開始されました"
+            message="予測タスクが正常に開始されました",
         )
 
     except Exception as e:
         logger.error(f"非同期予測タスクの開始に失敗しました: {str(e)}")
         raise HTTPException(
-            status_code=500, 
-            detail=f"非同期予測タスクの開始に失敗しました: {str(e)}"
+            status_code=500, detail=f"非同期予測タスクの開始に失敗しました: {str(e)}"
         )
 
 
@@ -611,8 +613,7 @@ async def get_prediction_status(task_id: str):
     """
     if task_id not in prediction_tasks:
         raise HTTPException(
-            status_code=404,
-            detail=f"タスクが見つかりません: {task_id}"
+            status_code=404, detail=f"タスクが見つかりません: {task_id}"
         )
     return prediction_tasks[task_id]
 
@@ -871,7 +872,7 @@ def _determine_best_interpolation_method(
     elif len(values) > 20 and smoothness < 0.05:  # 十分なデータ点があり非常に滑らか
         # データ点が多く滑らかな場合のみcubicを使用
         return "cubic"
-    elif len(values) > 10 and 0.05 <= smoothness < 0.3:  # 中程度の滑らかさ
+    elif len(values) >= 10 and 0.05 <= smoothness < 0.3:  # 中程度の滑らかさ
         # 中程度の滑らかさには2次補間
         return "quadratic"
     else:

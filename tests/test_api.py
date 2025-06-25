@@ -506,7 +506,7 @@ def test_normalize_time_series_data_edge_cases():
 
     # ケース2: NaN値を含むデータ
     timestamps_with_nan = [now - datetime.timedelta(hours=i) for i in range(5, 0, -1)]
-    values_with_nan = [10.0, float('nan'), 12.0, 13.0, 14.0]
+    values_with_nan = [10.0, float("nan"), 12.0, 13.0, 14.0]
 
     # NaN値を含むデータでも処理できることを確認
     try:
@@ -517,7 +517,9 @@ def test_normalize_time_series_data_edge_cases():
         assert len(normalized_timestamps_nan) >= len(timestamps_with_nan)
         assert len(normalized_values_nan) == len(normalized_timestamps_nan)
         # 補間後にNaN値がないことを確認
-        assert not any(math.isnan(v) for v in normalized_values_nan if not math.isnan(v))
+        assert not any(
+            math.isnan(v) for v in normalized_values_nan if not math.isnan(v)
+        )
     except Exception:
         # NaN値の処理でエラーが発生する場合もあるため、例外をキャッチ
         pass
@@ -540,7 +542,7 @@ def test_normalize_time_series_data_edge_cases():
         base_time,
         base_time + datetime.timedelta(microseconds=1),
         base_time + datetime.timedelta(microseconds=2),
-        base_time + datetime.timedelta(microseconds=3)
+        base_time + datetime.timedelta(microseconds=3),
     ]
     values_short_interval = [10.0, 11.0, 12.0, 13.0]
 
@@ -557,8 +559,8 @@ def test_normalize_time_series_data_edge_cases():
     values_reverse = [10.0, 11.0, 12.0]
 
     # 逆順データでも処理できることを確認
-    normalized_timestamps_reverse, normalized_values_reverse = normalize_time_series_data(
-        timestamps_reverse, values_reverse
+    normalized_timestamps_reverse, normalized_values_reverse = (
+        normalize_time_series_data(timestamps_reverse, values_reverse)
     )
     assert len(normalized_timestamps_reverse) >= len(timestamps_reverse)
     assert len(normalized_values_reverse) == len(normalized_timestamps_reverse)

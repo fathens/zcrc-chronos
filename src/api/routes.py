@@ -267,7 +267,7 @@ class PredictionStatus(str, Enum):
 
 class AsyncPredictionRequest(BaseModel):
     """非同期ゼロショット予測リクエストモデル"""
-    
+
     timestamp: List[datetime.datetime]
     values: List[float]
     forecast_until: datetime.datetime
@@ -284,7 +284,7 @@ class AsyncPredictionRequest(BaseModel):
 
 class AsyncPredictionResponse(BaseModel):
     """非同期予測開始レスポンス"""
-    
+
     task_id: str
     status: PredictionStatus
     message: str
@@ -292,7 +292,7 @@ class AsyncPredictionResponse(BaseModel):
 
 class PredictionResult(BaseModel):
     """予測結果モデル"""
-    
+
     task_id: str
     status: PredictionStatus
     progress: Optional[float] = None
@@ -473,7 +473,7 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         prediction_tasks[task_id].status = PredictionStatus.RUNNING
         prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
         prediction_tasks[task_id].message = "予測処理を開始しました"
-        
+
         logger.info(f"タスク {task_id} の予測処理を開始します")
 
         # 時系列データの正規化
@@ -552,7 +552,7 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         # エラー処理
         error_msg = f"予測処理中にエラーが発生しました: {str(e)}"
         logger.error(f"タスク {task_id}: {error_msg}")
-        
+
         prediction_tasks[task_id].status = PredictionStatus.FAILED
         prediction_tasks[task_id].error = error_msg
         prediction_tasks[task_id].message = "予測処理に失敗しました"
@@ -564,14 +564,14 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
 async def predict_zero_shot_async(request: AsyncPredictionRequest, background_tasks: BackgroundTasks):
     """
     非同期でゼロショット予測を開始する
-    
+
     長時間実行される予測処理を非同期で開始し、task_idを返します。
     予測の進捗や結果は別のエンドポイントでポーリングして取得できます。
     """
     try:
         # 一意のタスクIDを生成
         task_id = str(uuid.uuid4())
-        
+
         # タスクを初期化
         now = datetime.datetime.utcnow()
         prediction_tasks[task_id] = PredictionResult(
@@ -582,18 +582,17 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest, background_ta
             created_at=now,
             updated_at=now
         )
-        
+
         # バックグラウンドタスクとして予測処理を開始
         background_tasks.add_task(run_prediction_task, task_id, request)
-        
+
         logger.info(f"非同期予測タスクを開始しました: {task_id}")
-        
         return AsyncPredictionResponse(
             task_id=task_id,
             status=PredictionStatus.PENDING,
             message="予測タスクが正常に開始されました"
         )
-        
+
     except Exception as e:
         logger.error(f"非同期予測タスクの開始に失敗しました: {str(e)}")
         raise HTTPException(
@@ -607,15 +606,14 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest, background_ta
 async def get_prediction_status(task_id: str):
     """
     予測タスクのステータスと結果を取得する
-    
+
     task_idに基づいて予測の進捗状況、結果、またはエラー情報を返します。
     """
     if task_id not in prediction_tasks:
         raise HTTPException(
-            status_code=404, 
+            status_code=404,
             detail=f"タスクが見つかりません: {task_id}"
         )
-    
     return prediction_tasks[task_id]
 
 
@@ -635,7 +633,7 @@ def normalize_time_series_data(
 ) -> Tuple[List[datetime.datetime], List[float]]:
     """
     時系列データを均等な間隔に正規化する関数
-    
+
     本関数は価格データの直線的予測問題を解決するために最適化されています。
     主要な改善点：
     1. 外れ値検出基準の緩和（1.5×IQR → 3.0×IQR）
@@ -745,12 +743,11 @@ def normalize_time_series_data(
             # 無限ループ防止とデータポイント数制限
             max_points = num_points * 3  # 最大でも3倍まで
             point_count = 0
-            
+
             while current_time <= end_time and point_count < max_points:
                 new_timestamps.append(current_time)
                 current_time += datetime.timedelta(seconds=adjusted_interval)
                 point_count += 1
-                
                 # 安全装置：間隔が非常に小さい場合の停止
                 if adjusted_interval < 0.001:  # 1ミリ秒未満
                     break
@@ -863,11 +860,10 @@ def _determine_best_interpolation_method(
 
     # 判断ロジック：価格データに特化した補間方法選択
     # 価格データでは変動の保持が重要なので、平滑化を避ける
-    
+
     # 非常に極端な外れ値がある場合のみ線形補間を使用
     if has_outliers and len(outliers) > len(values) * 0.2:  # 20%以上が外れ値
         return "linear"
-    
     # 時系列データの特性に基づく選択
     if value_volatility > 2.0:  # 非常に高い変動性
         # 高い変動性を保持するため線形補間

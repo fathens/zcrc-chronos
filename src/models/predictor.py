@@ -76,7 +76,6 @@ class TimeSeriesPredictor:
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
-        
         本関数は価格データの直線的予測問題を解決するために最適化されています。
         主要な改善点：
         1. Naiveモデルの完全除外（直線的予測の根本原因）
@@ -86,9 +85,8 @@ class TimeSeriesPredictor:
 
         予測期間の動的調整ロジック：
         - 短期予測（≤6時間）: 最低4時間確保、軽量で高速なモデル使用
-        - 中期予測（≤12時間）: 最低6時間確保、バランス型モデル使用  
+        - 中期予測（≤12時間）: 最低6時間確保、バランス型モデル使用
         - 長期予測（>12時間）: 最低12時間確保、高度なモデル使用
-        
         モデル選択戦略：
         - メイン学習: Naiveモデルを除外し、RecursiveTabular等の高度なモデルを優先
         - フォールバック: 予測期間に応じてETS, SeasonalNaive, Chronos等を選択
@@ -108,10 +106,9 @@ class TimeSeriesPredictor:
                 - 予測期間のタイムスタンプリスト
                 - 予測値リスト
                 - メタデータ辞書（使用モデル、調整後予測期間等を含む）
-                
+
         Raises:
             ValueError: 予測処理が完全に失敗した場合
-            
         Note:
             この実装により以下の問題が解決されています：
             - 直線的予測（Naiveモデルによる平坦な予測線）

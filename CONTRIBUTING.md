@@ -130,14 +130,7 @@ pytest -xvs -n auto
 - format、lint、testの3つのジョブがすべて通らない限りマージできません
 - コミット前にローカルで実行することを強く推奨します
 
-**必要なパッケージ**:
-```bash
-# フォーマット・リント用
-pip install black isort flake8 flake8-pyproject
-
-# テスト用
-pip install pytest pytest-cov pytest-xdist
-```
+**注意**: 上記のツールは`environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要です。
 
 ### Dockerデプロイ
 ```bash

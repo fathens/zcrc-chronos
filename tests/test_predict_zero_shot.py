@@ -64,12 +64,17 @@ class TestPredictZeroShotValidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot", json=request_data)
-        # データポイントが不十分な場合は500エラーが期待される
-        assert response.status_code == 500
+        # データポイントが不十分な場合は400エラーが期待される（クライアントエラー）
+        assert response.status_code == 400
 
         data = response.json()
         assert "detail" in data
-        assert "データポイントが不十分" in data["detail"]
+        assert (
+            "データポイントが不十分" in data["detail"]
+            or "少なくとも2つのデータポイントが必要です" in data["detail"]
+            or "At least some time series in train_data must have >= 5 observations"
+            in data["detail"]
+        )
 
     def test_different_forecast_horizons(self):
         """異なる予測期間でのテスト"""

@@ -1,0 +1,45 @@
+# .pre-commit-config.yaml
+# Pre-commit hooks using makers for unified tool management
+# Install: pip install pre-commit && pre-commit install
+#
+# 🚨 コミットが失敗した場合の修正方法:
+#   makers py-format # フォーマット修正
+#   makers check     # 再チェック
+#
+# 📋 前提条件:
+#   - makers (cargo-make) がインストール済み: cargo install cargo-make
+#   - environment.yml の開発ツール群がインストール済み
+
+repos:
+  # 基本的なファイル整合性チェック（軽量・高速）
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml                # YAML構文チェック
+      - id: check-toml                # TOML構文チェック
+      - id: check-json                # JSON構文チェック
+      - id: check-merge-conflict      # マージコンフリクトマーカーをチェック
+      - id: check-added-large-files   # 大きなファイルの追加を防ぐ
+      - id: trailing-whitespace       # 行末の空白をチェック（自動修正）
+      - id: end-of-file-fixer         # ファイル末尾改行をチェック（自動修正）
+
+  # makersを使用したPythonコード品質チェック
+  - repo: local
+    hooks:
+      - id: makers-format-check
+        name: makers format check (black + isort)
+        entry: makers
+        args: [format-check]
+        language: system
+        files: \.py$
+        pass_filenames: false
+        # コミット失敗時は: makers py-format
+
+      - id: makers-lint
+        name: makers lint (flake8)
+        entry: makers
+        args: [lint]
+        language: system
+        files: \.py$
+        pass_filenames: false
+        # コミット失敗時は: コードを手動修正

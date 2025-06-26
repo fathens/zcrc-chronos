@@ -40,9 +40,9 @@ class TimeSeriesPredictor:
     """
 
     def __init__(
-            self,
-            model_name: str = "chronos_default",
-            model_params: Optional[Dict[str, Any]] = None,
+        self,
+        model_name: str = "chronos_default",
+        model_params: Optional[Dict[str, Any]] = None,
     ):
         """
         初期化
@@ -72,11 +72,10 @@ class TimeSeriesPredictor:
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
 
     def zero_shot_predict(
-            self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
+        self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
         """
         AutoGluon-TimeSeries を使用したゼロショット予測を実行
-        
         本関数は価格データの直線的予測問題を解決するために最適化されています。
         主要な改善点：
         1. Naiveモデルの完全除外（直線的予測の根本原因）
@@ -86,9 +85,8 @@ class TimeSeriesPredictor:
 
         予測期間の動的調整ロジック：
         - 短期予測（≤6時間）: 最低4時間確保、軽量で高速なモデル使用
-        - 中期予測（≤12時間）: 最低6時間確保、バランス型モデル使用  
+        - 中期予測（≤12時間）: 最低6時間確保、バランス型モデル使用
         - 長期予測（>12時間）: 最低12時間確保、高度なモデル使用
-        
         モデル選択戦略：
         - メイン学習: Naiveモデルを除外し、RecursiveTabular等の高度なモデルを優先
         - フォールバック: 予測期間に応じてETS, SeasonalNaive, Chronos等を選択
@@ -108,10 +106,9 @@ class TimeSeriesPredictor:
                 - 予測期間のタイムスタンプリスト
                 - 予測値リスト
                 - メタデータ辞書（使用モデル、調整後予測期間等を含む）
-                
+
         Raises:
             ValueError: 予測処理が完全に失敗した場合
-            
         Note:
             この実装により以下の問題が解決されています：
             - 直線的予測（Naiveモデルによる平坦な予測線）
@@ -131,7 +128,10 @@ class TimeSeriesPredictor:
                 raise ValueError(error_msg)
 
             if len(timestamp) != len(values):
-                error_msg = f"timestampとvaluesの長さが一致しません: {len(timestamp)} vs {len(values)}"
+                error_msg = (
+                    f"timestampとvaluesの長さが一致しません: "
+                    f"{len(timestamp)} vs {len(values)}"
+                )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
@@ -147,14 +147,19 @@ class TimeSeriesPredictor:
 
             # 予測期間がデータサイズに対して大きすぎる場合の調整（柔軟な制限）
             # 短期予測と長期予測の両方に対応
-            max_safe_horizon = max(horizon, data_length // 2)  # 要求された予測期間かデータサイズの50%の大きい方
+            max_safe_horizon = max(
+                horizon, data_length // 2
+            )  # 要求された予測期間かデータサイズの50%の大きい方
             if horizon > max_safe_horizon:
                 original_horizon = horizon
                 horizon = max_safe_horizon
-                logger.warning(f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}")
+                logger.warning(
+                    f"予測期間が大きすぎるため調整します: {original_horizon} -> {horizon}"
+                )
 
             # AutoGluonの厳格な最小要件を回避
-            # 実際の制約: train_data length >= prediction_length + num_val_windows * val_step_size + margin
+            # 実際の制約: train_data length >= prediction_length +
+            # num_val_windows * val_step_size + margin
             autogluon_min_required = horizon + 5  # より現実的な最小要件
 
             if data_length < autogluon_min_required:
@@ -167,7 +172,8 @@ class TimeSeriesPredictor:
                 else:
                     horizon = 1  # 最後の手段
                 logger.warning(
-                    f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)")
+                    f"AutoGluon最小要件のため予測期間を調整します: {horizon} (データ: {data_length}ポイント)"
+                )
 
             logger.info(f"調整後の予測期間: {horizon}")
 
@@ -206,14 +212,50 @@ class TimeSeriesPredictor:
                 df["timestamp"] = df["timestamp"].dt.tz_localize(None)
 
             # データフレームの基本統計をログ出力
-            target_mean = df['target'].mean()
-            target_std = df['target'].std()
+            target_mean = df["target"].mean()
+            target_std = df["target"].std()
             logger.info(
-                f"データフレーム統計: shape={df.shape}, target_mean={target_mean:.4f}, target_std={target_std:.4f}")
+                f"データフレーム統計: shape={df.shape}, "
+                f"target_mean={target_mean:.4f}, target_std={target_std:.4f}"
+            )
+
+            # 時系列の頻度を推論して設定
+            # 時間間隔から頻度を決定
+            if delta == pd.Timedelta(hours=1):
+                freq = "h"  # 1時間
+            elif delta == pd.Timedelta(minutes=1):
+                freq = "min"  # 1分
+            elif delta == pd.Timedelta(days=1):
+                freq = "D"  # 1日
+            elif delta == pd.Timedelta(minutes=30):
+                freq = "30min"  # 30分
+            elif delta == pd.Timedelta(minutes=15):
+                freq = "15min"  # 15分
+            else:
+                # その他の間隔は秒数から推論
+                total_seconds = int(delta.total_seconds())
+                if total_seconds >= 86400:  # 1日以上
+                    freq = f"{total_seconds // 86400}D"
+                elif total_seconds >= 3600:  # 1時間以上
+                    freq = f"{total_seconds // 3600}h"
+                elif total_seconds >= 60:  # 1分以上
+                    freq = f"{total_seconds // 60}min"
+                else:
+                    freq = f"{total_seconds}s"
+
+            logger.info(f"推論された時系列頻度: {freq}")
 
             time_series_data = TimeSeriesDataFrame(
                 df, id_column="item_id", timestamp_column="timestamp"
             )
+
+            # 頻度を明示的に設定
+            try:
+                time_series_data = time_series_data.convert_frequency(freq=freq)
+                logger.info(f"時系列データの頻度を {freq} に設定しました")
+            except Exception as e:
+                logger.warning(f"頻度設定に失敗、デフォルトを使用: {e}")
+                # 頻度設定に失敗した場合はそのまま続行
 
             # AutoGluon-TimeSeries の設定
             preset = model_params.get("preset", "medium_quality")
@@ -223,7 +265,9 @@ class TimeSeriesPredictor:
                 # 非常に小さなデータセットの場合
                 preset = "medium_quality"
                 time_limit = 30  # 時間制限を短く
-                logger.warning(f"データサイズが小さいため設定を調整します: data_length={data_length}")
+                logger.warning(
+                    f"データサイズが小さいため設定を調整します: data_length={data_length}"
+                )
             elif data_length < 100:
                 # 小さなデータセットの場合
                 preset = "medium_quality"
@@ -237,7 +281,10 @@ class TimeSeriesPredictor:
             temp_model_dir = os.path.join(temp_dir, f"ag_ts_model_{uuid.uuid4().hex}")
             os.makedirs(temp_model_dir, exist_ok=True)
 
-            logger.info(f"AutoGluon設定: preset={preset}, time_limit={time_limit}, temp_dir={temp_model_dir}")
+            logger.info(
+                f"AutoGluon設定: preset={preset}, time_limit={time_limit}, "
+                f"temp_dir={temp_model_dir}"
+            )
 
             # AutoGluon-TimeSeries を使用した予測
             predictor = AutoGluonTSPredictor(
@@ -265,9 +312,14 @@ class TimeSeriesPredictor:
                     num_val_windows = 0
                     val_step_size = 1
                     logger.warning(
-                        f"安全のため検証を無効化: data_length={data_length}, horizon={horizon}, required_margin={safe_margin}")
+                        f"安全のため検証を無効化: data_length={data_length}, "
+                        f"horizon={horizon}, required_margin={safe_margin}"
+                    )
 
-                logger.info(f"検証設定: num_val_windows={num_val_windows}, val_step_size={val_step_size}")
+                logger.info(
+                    f"検証設定: num_val_windows={num_val_windows}, "
+                    f"val_step_size={val_step_size}"
+                )
 
                 # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
                 fit_kwargs = {
@@ -324,7 +376,7 @@ class TimeSeriesPredictor:
                     "num_val_windows": 0,
                     "val_step_size": 1,
                     "hyperparameters": retry_hyperparameters,
-                    "tuning_data": time_series_data  # num_val_windows=0エラーを回避
+                    "tuning_data": time_series_data,  # num_val_windows=0エラーを回避
                 }
 
                 predictor.fit(**retry_fit_kwargs)
@@ -388,9 +440,9 @@ class TimeSeriesPredictor:
             try:
                 # モックの場合と実際のライブラリの場合で処理を分ける
                 if (
-                        hasattr(forecast_result, "item_ids")
-                        and hasattr(forecast_result, "columns")
-                        and hasattr(forecast_result.columns, "levels")
+                    hasattr(forecast_result, "item_ids")
+                    and hasattr(forecast_result, "columns")
+                    and hasattr(forecast_result.columns, "levels")
                 ):
                     # AutoGluon.timeseriesの場合
                     item_id = time_series_data.item_ids[0]
@@ -429,8 +481,8 @@ class TimeSeriesPredictor:
                                 for q in [0.05, 0.95]:
                                     try:
                                         if (
-                                                time_series_data.item_ids[0]
-                                                in forecast_quantiles
+                                            time_series_data.item_ids[0]
+                                            in forecast_quantiles
                                         ):
                                             item_id = time_series_data.item_ids[0]
                                         else:
@@ -486,7 +538,8 @@ class TimeSeriesPredictor:
                 forecast_values = forecast_values[:horizon]
                 # 予測タイムスタンプも調整されたhorizonに合わせて再生成
                 forecast_timestamps = [
-                    latest_timestamp + delta * (i + 1) for i in range(len(forecast_values))
+                    latest_timestamp + delta * (i + 1)
+                    for i in range(len(forecast_values))
                 ]
                 # 信頼区間も同様に切り詰める
                 for key in confidence_intervals:
@@ -501,7 +554,18 @@ class TimeSeriesPredictor:
 
         except Exception as e:
             logger.error(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
-            raise ValueError(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
+
+            # データポイントが非常に少ない場合（5点未満）はエラーにする
+            if len(values) < 5:
+                error_msg = (
+                    f"データポイントが不十分です（{len(values)}点）。"
+                    "AutoGluonを使用した時系列予測には最低5つのデータポイントが必要です。"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            else:
+                # データポイントが十分にある場合は元のエラーを投げる
+                raise ValueError(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")
 
     def save_model(self, path: str) -> None:
         """

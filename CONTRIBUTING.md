@@ -16,24 +16,30 @@ AutoGluon-TimeSeriesライブラリを使用した日本語対応の時系列予
 - **設定システム**: アプリとモデル設定のYAMLベース管理
 - **コンテナ化デプロイ**: conda環境管理によるDocker環境
 
-## 必須コマンド
+## 開発環境セットアップ
 
-### 開発環境セットアップ
+### 🚀 クイックセットアップ（推奨）
+
 ```bash
-# conda環境の作成とアクティベート
+# 1. 前提条件: Rust/Cargoがインストール済みであることを確認
+# https://rustup.rs/ からインストール可能
+
+# 2. makersのインストール
+cargo install cargo-make
+
+# 3. conda環境の作成とアクティベート
 conda create -n zcrc-chronos python=3.12
 conda activate zcrc-chronos
 
-# 依存関係のインストール（テスト用パッケージも含む）
-conda env update -f environment.yml
+# 4. 開発環境の自動セットアップ
+makers setup
 ```
 
-**重要**: 以下の全てのコマンドは `conda activate zcrc-chronos` でconda環境をアクティベートしてから実行してください。
+**これだけで開発環境が完成します！** 🎉
 
-**注意**: `environment.yml`には開発・テストに必要な全てのパッケージ（pytest, fastapi, uvicorn, httpx等）が含まれています。
+### 🛠️ トラブルシューティング
 
-#### トラブルシューティング
-`conda env update`が失敗またはタイムアウトした場合：
+#### conda環境更新が失敗する場合
 ```bash
 # 個別にautogluonをインストール
 pip install autogluon.timeseries>=1.3.0
@@ -42,6 +48,20 @@ pip install autogluon.timeseries>=1.3.0
 pip install pytest fastapi uvicorn httpx pyyaml loguru pandas numpy
 pip install autogluon.timeseries
 ```
+
+#### makersコマンド一覧の確認
+```bash
+makers help  # 利用可能なコマンドを表示
+```
+
+### ✅ セットアップ完了の確認
+
+```bash
+# 環境が正しくセットアップされているかテスト
+makers check
+```
+
+## 必須コマンド
 
 ### アプリケーション実行
 ```bash
@@ -68,6 +88,30 @@ pytest tests/test_models.py
 # 実ライブラリを使用（モックなし）
 NEED_REAL_LIBRARY=true pytest
 ```
+
+#### 並列テスト実行（推奨）
+時間のかかるテストを効率的に実行するため、pytest-xdistを使用した並列実行が利用可能です：
+
+```bash
+# 🚀 推奨: 重要テストのみ並列実行（最速）
+makers test-critical
+
+# 📋 段階的テスト実行（確実性重視）
+makers test-split
+
+# ⚡ 全テスト並列実行
+makers test-parallel
+
+# 🔧 手動での並列実行例
+pytest tests/ -n auto -v --tb=short    # 自動ワーカー数
+pytest tests/ -n 4 -v                  # 4並列指定
+```
+
+**並列実行の特徴:**
+- `makers test-critical`: 重要なテスト（API、基本機能、無効入力）のみを並列実行（約30秒）
+- `makers test-split`: 段階的にテストを分割実行、問題箇所の特定が容易（約67秒）
+- `makers test-parallel`: 全テストを並列実行、最も包括的（時間は環境依存）
+- AutoGluonの重いテストも分散処理により高速化
 
 #### predict_zero_shot エンドポイントのテスト
 
@@ -106,16 +150,96 @@ pip install autogluon.timeseries>=1.3.0
 - これは技術的制限であり、実際のAPI機能には影響しません
 
 ### コード品質チェック
+
+**重要**: コミット前に必ず以下の全てのチェックを実行し、すべてエラーなしで通ることを確認してください。
+
+#### 🚀 簡単な方法（推奨）
+
 ```bash
-# コードフォーマット
-black src tests
+# 前提条件: makersのインストール（初回のみ）
+cargo install cargo-make
 
-# コードスタイルチェック
-flake8 src tests
+# makers を使用（最も簡単）
+makers check          # フォーマット＋リント
+makers all           # フォーマット＋リント＋テスト
+makers ci-check      # CIと同じチェック
 
-# インポート文整理
-isort src tests
+# または pre-commit フックを使用（1回設定後は自動）
+makers pre-commit    # 初回設定
+# 以降はコミット時に自動実行される
 ```
+
+#### 📋 個別実行
+
+```bash
+# 1. コードフォーマット（自動修正）
+makers py-format
+
+# 2. フォーマット確認（変更が必要な場合はエラー）
+makers format-check
+
+# 3. コードスタイルチェック（エラーが出た場合は修正が必要）
+makers lint
+
+# 4. テスト実行（すべてのテストが通ることを確認）
+makers test
+
+# 5. 高速テスト（失敗時停止）
+makers test-fast
+```
+
+#### ⚙️ 自動化オプション
+
+**Pre-commit Hooks（推奨）:**
+
+pre-commitは `makers setup` で自動設定され、以下の流れでコード品質を保証します：
+
+```
+git commit → pre-commit起動 → makersでチェック → コミット成功/失敗
+     ↓              ↓              ↓
+   ユーザー     自動フック       統一ツール
+```
+
+**実行フロー:**
+```
+1. git commit -m "your message"
+   ↓
+2. pre-commit が自動起動
+   ↓
+3. makers format-check (black + isort でフォーマットチェック)
+   ↓
+4. makers lint (flake8 でコードスタイルチェック)
+   ↓
+5. チェック結果
+   ├─ ✅ 全て通過 → コミット成功
+   └─ ❌ 失敗 → コミット阻止
+```
+
+**コミットが失敗した場合の修正方法:**
+```bash
+makers py-format  # フォーマット修正
+makers check      # 再チェック
+git commit -m "your message"  # 再実行
+```
+
+**CI/CDパイプライン**:
+- プルリクエスト作成時に以下のジョブが並列実行されます（`.github/workflows/ci.yml`参照）:
+  - `format`: コードフォーマットチェック
+  - `lint`: コードスタイルチェック
+  - `test-critical`: 重要テストの並列実行（約30秒）
+  - `test-matrix`: 複数環境でのテスト実行
+- mainブランチでは追加で`test-comprehensive`が段階的に実行されます
+- **pre-commitフックまたはmakersの使用を強く推奨します**
+
+**CI並列テスト戦略**:
+- `test-critical`: API・基本機能・無効入力テストを10並列実行
+- `test-comprehensive`: 4段階に分けて全テストを実行（mainブランチのみ）
+- `test-matrix`: Ubuntu最新版・20.04でクロステスト
+- 時間制限（10分）と失敗許容設定でタイムアウト回避
+
+**依存関係**:
+- **makers**: `cargo install cargo-make`でインストール（初回のみ）
+- **開発ツール**: `makers setup`で自動インストールされます
 
 ### Dockerデプロイ
 ```bash
@@ -153,6 +277,27 @@ docker compose down
   - `NEED_REAL_LIBRARY=true`: 実際のAutoGluonライブラリを使用
   - `CAN_SKIP_REAL_LIBRARY=true`: 実ライブラリテストをスキップ
 - `tests/conftest.py`にchronos-boltライブラリ用モックフィクスチャを配置
+
+#### テスト実行戦略（重要）
+コード変更時は以下の順序で段階的にテストを実行し、影響範囲を適切に検証する：
+
+```bash
+# 1. 個別テスト（変更対象の特定テスト）
+pytest tests/test_specific.py::test_method -v
+
+# 2. 関連テストクラス（影響を受ける可能性のあるテスト群）
+pytest tests/test_related.py::TestRelatedClass -v
+
+# 3. 関連テストファイル（同一機能領域の全テスト）
+pytest tests/test_related.py -v
+
+# 4. 最終確認（時間に余裕があれば）
+pytest tests/ -k "not slow" --tb=short
+```
+
+**特に重要**: エラーハンドリング変更時は、エラーコードを期待する全テストを確認する。影響範囲の例：
+- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト
+- Mockロジック変更 → 同一テストファイル内の全テスト
 
 #### 主要テストファイル
 - `tests/test_predict_zero_shot.py`: predict_zero_shotエンドポイントの包括的テストスイート

@@ -42,6 +42,30 @@ exclude = [
     "venv",
 ]
 
-[tool.pytest]
-testpaths = ["tests"]
-python_files = "test_*.py"
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+# scriptsディレクトリをテスト対象から除外
+norecursedirs = [
+    "scripts",
+    "*.egg",
+    ".eggs",
+    "dist",
+    "build",
+    "docs",
+    ".tox",
+    ".git",
+    "__pycache__"
+]
+# テストマーカー定義
+markers = [
+    "slow: 実行時間の長いテスト（AutoGluon使用など）",
+    "fast: 高速実行可能なテスト",
+    "integration: 統合テスト",
+    "unit: ユニットテスト",
+    "api: APIテスト",
+    "model: モデルテスト"
+]

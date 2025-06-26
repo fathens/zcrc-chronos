@@ -2,7 +2,7 @@
 # makers configuration for zcrc-chronos development
 # コミット前の品質チェックを簡単に実行するためのコマンド
 
-[tasks.format]
+[tasks.py-format]
 description = "コードフォーマット (black, isort)"
 script = [
     "echo '🔧 コードフォーマットを実行しています...'",
@@ -47,16 +47,14 @@ script = [
 [tasks.check]
 description = "全チェック（コミット前推奨）"
 dependencies = ["format-check", "lint"]
-script = [
-    "echo '✅ 全チェック完了 - コミット可能です'"
-]
+command = "echo"
+args = ["✅ 全チェック完了 - コミット可能です"]
 
 [tasks.all]
 description = "全処理実行"
-dependencies = ["format", "lint", "test"]
-script = [
-    "echo '✅ 全処理完了'"
-]
+dependencies = ["py-format", "lint", "test"]
+command = "echo"
+args = ["✅ 全処理完了"]
 
 [tasks.pre-commit]
 description = "pre-commitフック設定"
@@ -93,7 +91,7 @@ script = [
 description = "利用可能なコマンド表示"
 script = [
     "echo '利用可能なコマンド:'",
-    "echo '  makers format      - コードフォーマット (black, isort)'",
+    "echo '  makers py-format   - コードフォーマット (black, isort)'",
     "echo '  makers lint        - リント実行 (flake8)'",
     "echo '  makers test        - テスト実行 (pytest)'",
     "echo '  makers check       - 全チェック実行 (format + lint)'",

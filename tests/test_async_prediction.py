@@ -317,25 +317,18 @@ class TestAsyncPredictionCancellation:
         response = client.delete(f"/api/v1/prediction_cancel/{fake_task_id}")
         assert response.status_code == 404
 
-    @patch("src.api.routes.run_prediction_task")
-    def test_cancel_completed_task(self, mock_run_task):
+    def test_cancel_completed_task(self):
         """完了済みタスクのキャンセルテスト"""
         request_data = create_test_request_data()
-
-        def mock_task_execution(task_id, request):
-            """モックタスクを即座に完了させる"""
-            task_manager.update_task(
-                task_id, status=PredictionStatus.COMPLETED, progress=1.0, message="完了"
-            )
-
-        mock_run_task.side_effect = mock_task_execution
 
         # タスクを作成
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         task_id = response.json()["task_id"]
 
-        # 少し待ってタスクが完了するまで待つ
-        time.sleep(0.5)
+        # タスクを手動で完了状態に設定
+        task_manager.update_task(
+            task_id, status=PredictionStatus.COMPLETED, progress=1.0, message="完了"
+        )
 
         # 完了済みタスクのキャンセルを試行
         cancel_response = client.delete(f"/api/v1/prediction_cancel/{task_id}")

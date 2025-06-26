@@ -24,7 +24,7 @@ script = [
 description = "リント実行 (flake8)"
 script = [
     "echo '🔍 リントを実行しています...'",
-    "flake8 .",
+    "flake8 src tests",
     "echo '✅ リント完了'"
 ]
 

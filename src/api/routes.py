@@ -91,7 +91,7 @@ class TaskManager:
                 for key, value in kwargs.items():
                     if hasattr(task, key):
                         setattr(task, key, value)
-                task.updated_at = datetime.datetime.utcnow()
+                task.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
     def cancel_task(self, task_id: str) -> bool:
         """タスクをキャンセル"""
@@ -117,7 +117,7 @@ class TaskManager:
 
     def _cleanup_old_tasks(self):
         """古いタスクをクリーンアップ"""
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         cutoff_time = now - datetime.timedelta(hours=self._cleanup_interval_hours)
 
         tasks_to_remove = []
@@ -142,7 +142,7 @@ class TaskManager:
                 ]:
                     # 完了から1時間経過したタスクを削除
                     if (
-                        datetime.datetime.utcnow() - task.updated_at
+                        datetime.datetime.now(datetime.timezone.utc) - task.updated_at
                     ).total_seconds() > 3600:
                         tasks_to_remove.append(task_id)
 
@@ -727,7 +727,7 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest):
         task_id = str(uuid.uuid4())
 
         # タスクを初期化
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         task = PredictionResult(
             task_id=task_id,
             status=PredictionStatus.PENDING,
@@ -804,8 +804,14 @@ async def cancel_prediction_task(task_id: str):
         PredictionStatus.FAILED,
         PredictionStatus.CANCELLED,
     ]:
-        raise HTTPException(
-            status_code=400, detail=f"タスクは既に完了しています: {task.status}"
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"タスクは既に{task.status.value}状態です",
+                "task_id": task_id,
+            },
         )
 
     cancelled = task_manager.cancel_task(task_id)

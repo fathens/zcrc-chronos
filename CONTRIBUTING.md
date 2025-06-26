@@ -244,6 +244,27 @@ docker compose down
   - `CAN_SKIP_REAL_LIBRARY=true`: 実ライブラリテストをスキップ
 - `tests/conftest.py`にchronos-boltライブラリ用モックフィクスチャを配置
 
+#### テスト実行戦略（重要）
+コード変更時は以下の順序で段階的にテストを実行し、影響範囲を適切に検証する：
+
+```bash
+# 1. 個別テスト（変更対象の特定テスト）
+pytest tests/test_specific.py::test_method -v
+
+# 2. 関連テストクラス（影響を受ける可能性のあるテスト群）
+pytest tests/test_related.py::TestRelatedClass -v
+
+# 3. 関連テストファイル（同一機能領域の全テスト）
+pytest tests/test_related.py -v
+
+# 4. 最終確認（時間に余裕があれば）
+pytest tests/ -k "not slow" --tb=short
+```
+
+**特に重要**: エラーハンドリング変更時は、エラーコードを期待する全テストを確認する。影響範囲の例：
+- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト
+- Mockロジック変更 → 同一テストファイル内の全テスト
+
 #### 主要テストファイル
 - `tests/test_predict_zero_shot.py`: predict_zero_shotエンドポイントの包括的テストスイート
   - 正常入力テスト（基本予測、最小データポイント、異なる予測期間、不規則間隔データ等）

@@ -460,8 +460,22 @@ async def predict_zero_shot(request: ZeroShotPredictionRequest):
         )
 
         return response
+    except HTTPException:
+        # HTTPExceptionはそのまま再発生させる
+        raise
     except Exception as e:
         logger.error(f"ゼロショット予測処理に失敗しました: {e}")
+
+        # データポイント不足の場合は400エラーとして処理
+        error_message = str(e)
+        if (
+            "データポイントが不十分" in error_message
+            or "少なくとも2つのデータポイントが必要です" in error_message
+            or "At least some time series in train_data must have >= 5 observations"
+            in error_message
+        ):
+            raise HTTPException(status_code=400, detail=error_message)
+
         raise HTTPException(
             status_code=500, detail=f"ゼロショット予測処理に失敗しました: {e}"
         )

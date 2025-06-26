@@ -125,22 +125,23 @@ makers pre-commit    # 初回設定
 # 以降はコミット時に自動実行される
 ```
 
-#### 📋 手動実行
+#### 📋 個別実行
 
 ```bash
 # 1. コードフォーマット（自動修正）
-black .
-isort .
+makers py-format
 
 # 2. フォーマット確認（変更が必要な場合はエラー）
-black --check src tests
-isort --check-only --profile black src tests
+makers format-check
 
 # 3. コードスタイルチェック（エラーが出た場合は修正が必要）
-flake8 src tests
+makers lint
 
 # 4. テスト実行（すべてのテストが通ることを確認）
-pytest tests/ -xvs -n auto
+makers test
+
+# 5. 高速テスト（失敗時停止）
+makers test-fast
 ```
 
 #### ⚙️ 自動化オプション
@@ -163,23 +164,15 @@ makers check      # 再チェック
 git commit -m "your message"  # 再実行
 ```
 
-**VS Code設定（.vscode/settings.json）:**
-```json
-{
-    "python.formatting.provider": "black",
-    "python.linting.enabled": true,
-    "python.linting.flake8Enabled": true,
-    "editor.formatOnSave": true,
-    "python.sortImports.args": ["--profile", "black"]
-}
-```
-
 **CI/CDパイプライン**:
 - プルリクエスト作成時に上記のチェックが自動実行されます（`.github/workflows/ci.yml`参照）
 - format、lint、testの3つのジョブがすべて通らない限りマージできません
 - **pre-commitフックまたはmakersの使用を強く推奨します**
 
-**依存関係**: 上記のツールは`environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要です。
+**依存関係**:
+- **makers**: `cargo install cargo-make`でインストール（初回のみ）
+- **開発ツール**: `environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要
+- **pre-commit**: `pip install pre-commit`（pre-commit使用時のみ）
 
 ### Dockerデプロイ
 ```bash

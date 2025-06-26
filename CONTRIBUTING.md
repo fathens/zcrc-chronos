@@ -112,6 +112,9 @@ pip install autogluon.timeseries>=1.3.0
 #### 🚀 簡単な方法（推奨）
 
 ```bash
+# 前提条件: makersのインストール（初回のみ）
+cargo install cargo-make
+
 # makers を使用（最も簡単）
 makers check          # フォーマット＋リント
 makers all           # フォーマット＋リント＋テスト
@@ -144,12 +147,20 @@ pytest tests/ -xvs -n auto
 
 **Pre-commit Hooks（推奨）:**
 ```bash
+# 前提条件: makersのインストール
+cargo install cargo-make
+
 # 初回設定
 pip install pre-commit
 pre-commit install
 
 # 設定後はgit commitで自動実行される
-git commit -m "your message"  # 自動でformat/lint/testが実行
+git commit -m "your message"  # makersを通してformat/lintチェックが実行
+
+# コミットが失敗した場合
+makers py-format  # フォーマット修正
+makers check      # 再チェック
+git commit -m "your message"  # 再実行
 ```
 
 **VS Code設定（.vscode/settings.json）:**
@@ -163,7 +174,7 @@ git commit -m "your message"  # 自動でformat/lint/testが実行
 }
 ```
 
-**CI/CDパイプライン**: 
+**CI/CDパイプライン**:
 - プルリクエスト作成時に上記のチェックが自動実行されます（`.github/workflows/ci.yml`参照）
 - format、lint、testの3つのジョブがすべて通らない限りマージできません
 - **pre-commitフックまたはmakersの使用を強く推奨します**

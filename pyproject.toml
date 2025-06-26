@@ -53,7 +53,7 @@ norecursedirs = [
     "scripts",
     "*.egg",
     ".eggs",
-    "dist", 
+    "dist",
     "build",
     "docs",
     ".tox",

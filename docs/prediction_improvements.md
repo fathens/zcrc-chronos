@@ -187,7 +187,7 @@ except Exception as fit_error:
         retry_models = ["ETS", "SeasonalNaive", "RecursiveTabular"]
     else:
         retry_models = ["SeasonalNaive", "ETS", "Theta", "RecursiveTabular", "Chronos"]
-    
+
     predictor.fit(..., hyperparameters=retry_models)
 ```
 
@@ -256,7 +256,7 @@ ignore_horizon_limits = False
 
 ---
 
-**最終更新**: 2025年6月14日  
-**バージョン**: v2.0.0  
-**作成者**: Claude Code  
+**最終更新**: 2025年6月14日
+**バージョン**: v2.0.0
+**作成者**: Claude Code
 **関連ファイル**: `src/models/predictor.py`, `src/api/routes.py`

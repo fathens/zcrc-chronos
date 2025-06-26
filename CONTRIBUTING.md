@@ -16,24 +16,30 @@ AutoGluon-TimeSeriesライブラリを使用した日本語対応の時系列予
 - **設定システム**: アプリとモデル設定のYAMLベース管理
 - **コンテナ化デプロイ**: conda環境管理によるDocker環境
 
-## 必須コマンド
+## 開発環境セットアップ
 
-### 開発環境セットアップ
+### 🚀 クイックセットアップ（推奨）
+
 ```bash
-# conda環境の作成とアクティベート
+# 1. 前提条件: Rust/Cargoがインストール済みであることを確認
+# https://rustup.rs/ からインストール可能
+
+# 2. makersのインストール
+cargo install cargo-make
+
+# 3. conda環境の作成とアクティベート
 conda create -n zcrc-chronos python=3.12
 conda activate zcrc-chronos
 
-# 依存関係のインストール（テスト用パッケージも含む）
-conda env update -f environment.yml
+# 4. 開発環境の自動セットアップ
+makers setup
 ```
 
-**重要**: 以下の全てのコマンドは `conda activate zcrc-chronos` でconda環境をアクティベートしてから実行してください。
+**これだけで開発環境が完成します！** 🎉
 
-**注意**: `environment.yml`には開発・テストに必要な全てのパッケージ（pytest, fastapi, uvicorn, httpx等）が含まれています。
+### 🛠️ トラブルシューティング
 
-#### トラブルシューティング
-`conda env update`が失敗またはタイムアウトした場合：
+#### conda環境更新が失敗する場合
 ```bash
 # 個別にautogluonをインストール
 pip install autogluon.timeseries>=1.3.0
@@ -42,6 +48,20 @@ pip install autogluon.timeseries>=1.3.0
 pip install pytest fastapi uvicorn httpx pyyaml loguru pandas numpy
 pip install autogluon.timeseries
 ```
+
+#### makersコマンド一覧の確認
+```bash
+makers help  # 利用可能なコマンドを表示
+```
+
+### ✅ セットアップ完了の確認
+
+```bash
+# 環境が正しくセットアップされているかテスト
+makers check
+```
+
+## 必須コマンド
 
 ### アプリケーション実行
 ```bash
@@ -151,10 +171,6 @@ makers test-fast
 # 前提条件: makersのインストール
 cargo install cargo-make
 
-# 初回設定
-pip install pre-commit
-pre-commit install
-
 # 設定後はgit commitで自動実行される
 git commit -m "your message"  # makersを通してformat/lintチェックが実行
 
@@ -171,8 +187,7 @@ git commit -m "your message"  # 再実行
 
 **依存関係**:
 - **makers**: `cargo install cargo-make`でインストール（初回のみ）
-- **開発ツール**: `environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要
-- **pre-commit**: `pip install pre-commit`（pre-commit使用時のみ）
+- **開発ツール**: `makers setup`で自動インストールされます
 
 ### Dockerデプロイ
 ```bash

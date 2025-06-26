@@ -87,16 +87,48 @@ script = [
     "echo '✅ CIチェック完了'"
 ]
 
+[tasks.setup]
+description = "開発環境の初期セットアップ"
+script = [
+    "echo '🚀 開発環境をセットアップしています...'",
+    "echo '📦 conda環境を更新中...'",
+    "conda env update -f environment.yml",
+    "echo '🔧 pre-commitフックを設定中...'",
+    "pip install pre-commit",
+    "pre-commit install",
+    "echo '✅ セットアップ完了! 以下のコマンドが利用可能です:'",
+    "echo '  makers py-format   - コードフォーマット (black, isort)'",
+    "echo '  makers check       - 全チェック実行 (format + lint)'",
+    "echo '  makers all         - 全処理実行 (format + lint + test)'",
+    "echo '  makers help        - コマンド一覧表示'"
+]
+
+[tasks.setup-conda-only]
+description = "conda環境のみセットアップ（pre-commitなし）"
+script = [
+    "echo '📦 conda環境を更新しています...'",
+    "conda env update -f environment.yml",
+    "echo '✅ conda環境セットアップ完了!'"
+]
+
 [tasks.help]
 description = "利用可能なコマンド表示"
 script = [
     "echo '利用可能なコマンド:'",
-    "echo '  makers py-format   - コードフォーマット (black, isort)'",
-    "echo '  makers lint        - リント実行 (flake8)'",
-    "echo '  makers test        - テスト実行 (pytest)'",
-    "echo '  makers check       - 全チェック実行 (format + lint)'",
-    "echo '  makers all         - 全処理実行 (format + lint + test)'",
-    "echo '  makers clean       - 一時ファイル削除'",
-    "echo '  makers pre-commit  - pre-commitフック設定'",
-    "echo '  makers ci-check    - CIと同じチェック'"
+    "echo ''",
+    "echo '🚀 セットアップ:'",
+    "echo '  makers setup          - 開発環境の初期セットアップ（推奨）'",
+    "echo '  makers setup-conda-only - conda環境のみセットアップ'",
+    "echo ''",
+    "echo '🔧 開発作業:'",
+    "echo '  makers py-format      - コードフォーマット (black, isort)'",
+    "echo '  makers lint           - リント実行 (flake8)'",
+    "echo '  makers test           - テスト実行 (pytest)'",
+    "echo '  makers check          - 全チェック実行 (format + lint)'",
+    "echo '  makers all            - 全処理実行 (format + lint + test)'",
+    "echo ''",
+    "echo '🛠️  ユーティリティ:'",
+    "echo '  makers clean          - 一時ファイル削除'",
+    "echo '  makers pre-commit     - pre-commitフック設定'",
+    "echo '  makers ci-check       - CIと同じチェック'"
 ]

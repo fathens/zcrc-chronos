@@ -167,14 +167,32 @@ makers test-fast
 #### ⚙️ 自動化オプション
 
 **Pre-commit Hooks（推奨）:**
+
+pre-commitは `makers setup` で自動設定され、以下の流れでコード品質を保証します：
+
+```
+git commit → pre-commit起動 → makersでチェック → コミット成功/失敗
+     ↓              ↓              ↓
+   ユーザー     自動フック       統一ツール
+```
+
+**実行フロー:**
+```
+1. git commit -m "your message"
+   ↓
+2. pre-commit が自動起動
+   ↓
+3. makers format-check (black + isort でフォーマットチェック)
+   ↓
+4. makers lint (flake8 でコードスタイルチェック)
+   ↓
+5. チェック結果
+   ├─ ✅ 全て通過 → コミット成功
+   └─ ❌ 失敗 → コミット阻止
+```
+
+**コミットが失敗した場合の修正方法:**
 ```bash
-# 前提条件: makersのインストール
-cargo install cargo-make
-
-# 設定後はgit commitで自動実行される
-git commit -m "your message"  # makersを通してformat/lintチェックが実行
-
-# コミットが失敗した場合
 makers py-format  # フォーマット修正
 makers check      # 再チェック
 git commit -m "your message"  # 再実行

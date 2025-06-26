@@ -109,6 +109,21 @@ pip install autogluon.timeseries>=1.3.0
 
 **重要**: コミット前に必ず以下の全てのチェックを実行し、すべてエラーなしで通ることを確認してください。
 
+#### 🚀 簡単な方法（推奨）
+
+```bash
+# makers を使用（最も簡単）
+makers check          # フォーマット＋リント
+makers all           # フォーマット＋リント＋テスト
+makers ci-check      # CIと同じチェック
+
+# または pre-commit フックを使用（1回設定後は自動）
+makers pre-commit    # 初回設定
+# 以降はコミット時に自動実行される
+```
+
+#### 📋 手動実行
+
 ```bash
 # 1. コードフォーマット（自動修正）
 black .
@@ -122,15 +137,38 @@ isort --check-only --profile black src tests
 flake8 src tests
 
 # 4. テスト実行（すべてのテストが通ることを確認）
-pytest -xvs -n auto
+pytest tests/ -xvs -n auto
+```
+
+#### ⚙️ 自動化オプション
+
+**Pre-commit Hooks（推奨）:**
+```bash
+# 初回設定
+pip install pre-commit
+pre-commit install
+
+# 設定後はgit commitで自動実行される
+git commit -m "your message"  # 自動でformat/lint/testが実行
+```
+
+**VS Code設定（.vscode/settings.json）:**
+```json
+{
+    "python.formatting.provider": "black",
+    "python.linting.enabled": true,
+    "python.linting.flake8Enabled": true,
+    "editor.formatOnSave": true,
+    "python.sortImports.args": ["--profile", "black"]
+}
 ```
 
 **CI/CDパイプライン**: 
 - プルリクエスト作成時に上記のチェックが自動実行されます（`.github/workflows/ci.yml`参照）
 - format、lint、testの3つのジョブがすべて通らない限りマージできません
-- コミット前にローカルで実行することを強く推奨します
+- **pre-commitフックまたはmakersの使用を強く推奨します**
 
-**注意**: 上記のツールは`environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要です。
+**依存関係**: 上記のツールは`environment.yml`に含まれているため、`conda env update -f environment.yml`実行済みであれば追加インストールは不要です。
 
 ### Dockerデプロイ
 ```bash

@@ -1,0 +1,104 @@
+# Makefile.toml
+# makers configuration for zcrc-chronos development
+# コミット前の品質チェックを簡単に実行するためのコマンド
+
+[tasks.format]
+description = "コードフォーマット (black, isort)"
+script = [
+    "echo '🔧 コードフォーマットを実行しています...'",
+    "black .",
+    "isort .",
+    "echo '✅ フォーマット完了'"
+]
+
+[tasks.format-check]
+description = "フォーマットチェック（修正なし）"
+script = [
+    "echo '🔍 フォーマットをチェックしています...'",
+    "black --check --diff .",
+    "isort --check-only --profile black .",
+    "echo '✅ フォーマットチェック完了'"
+]
+
+[tasks.lint]
+description = "リント実行 (flake8)"
+script = [
+    "echo '🔍 リントを実行しています...'",
+    "flake8 .",
+    "echo '✅ リント完了'"
+]
+
+[tasks.test]
+description = "テスト実行 (pytest)"
+script = [
+    "echo '🧪 テストを実行しています...'",
+    "pytest tests/ -v",
+    "echo '✅ テスト完了'"
+]
+
+[tasks.test-fast]
+description = "高速テスト（失敗時停止）"
+script = [
+    "echo '🧪 高速テストを実行しています...'",
+    "pytest tests/ -x --tb=short",
+    "echo '✅ 高速テスト完了'"
+]
+
+[tasks.check]
+description = "全チェック（コミット前推奨）"
+dependencies = ["format-check", "lint"]
+script = [
+    "echo '✅ 全チェック完了 - コミット可能です'"
+]
+
+[tasks.all]
+description = "全処理実行"
+dependencies = ["format", "lint", "test"]
+script = [
+    "echo '✅ 全処理完了'"
+]
+
+[tasks.pre-commit]
+description = "pre-commitフック設定"
+script = [
+    "echo '⚙️  pre-commitフックを設定しています...'",
+    "pip install pre-commit",
+    "pre-commit install",
+    "echo '✅ pre-commitフック設定完了'"
+]
+
+[tasks.clean]
+description = "一時ファイル削除"
+script = [
+    "echo '🧹 一時ファイルを削除しています...'",
+    "find . -type f -name '*.pyc' -delete",
+    "find . -type d -name '__pycache__' -delete",
+    "find . -type d -name '.pytest_cache' -exec rm -rf {} + || true",
+    "find . -type d -name '*.egg-info' -exec rm -rf {} + || true",
+    "echo '✅ クリーンアップ完了'"
+]
+
+[tasks.ci-check]
+description = "CIと同じチェック"
+script = [
+    "echo '🔄 CIと同じチェックを実行しています...'",
+    "black --check src tests",
+    "isort --check-only --profile black src tests",
+    "flake8 src tests",
+    "pytest tests/ -xvs -n auto",
+    "echo '✅ CIチェック完了'"
+]
+
+[tasks.help]
+description = "利用可能なコマンド表示"
+script = [
+    "echo '利用可能なコマンド:'",
+    "echo '  makers format      - コードフォーマット (black, isort)'",
+    "echo '  makers lint        - リント実行 (flake8)'",
+    "echo '  makers test        - テスト実行 (pytest)'",
+    "echo '  makers check       - 全チェック実行 (format + lint)'",
+    "echo '  makers all         - 全処理実行 (format + lint + test)'",
+    "echo '  makers clean       - 一時ファイル削除'",
+    "echo '  makers pre-commit  - pre-commitフック設定'",
+    "echo '  makers ci-check    - CIと同じチェック'"
+]

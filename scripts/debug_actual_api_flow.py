@@ -2,6 +2,7 @@
 """
 実際のAPI処理フローを詳細に調査するスクリプト
 """
+
 import datetime
 import json
 import os
@@ -69,7 +70,7 @@ def trace_api_flow():
         orig_range = max(values) - min(values)
         norm_range = max(norm_values) - min(norm_values)
         print(
-            f"変動保持: {orig_range:.0f} → {norm_range:.0f} ({norm_range/orig_range:.2%})"
+            f"変動保持: {orig_range:.0f} → {norm_range:.0f} ({norm_range / orig_range:.2%})"
         )
 
         # STEP 2: AutoGluon予測処理を詳細に追跡
@@ -141,7 +142,7 @@ def test_different_data_scenarios():
     """
     異なるデータシナリオで直線化の原因を特定
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 異なるデータシナリオでのテスト ===")
 
     scenarios = [
@@ -216,7 +217,7 @@ def main():
     # 2. 異なるデータシナリオでテスト
     test_different_data_scenarios()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("調査完了")
     print("\n判明した可能性:")
     print("1. 正規化処理での変動の損失")

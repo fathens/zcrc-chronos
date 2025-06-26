@@ -2,6 +2,7 @@
 """
 最終的な改善をテストする総合テスト
 """
+
 import datetime
 import os
 import sys
@@ -43,7 +44,7 @@ def test_price_data_patterns():
     """
     実際の価格データパターンをテスト
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== 価格データパターンテスト ===")
 
     base_time = datetime.datetime(2025, 6, 14, 10, 0, 0)
@@ -167,7 +168,7 @@ def test_improvement_summary():
     """
     改善内容のサマリーテスト
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 改善内容サマリー ===")
 
     print("\n実装した改善:")
@@ -197,7 +198,7 @@ def main():
     test_price_data_patterns()
     test_improvement_summary()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("テスト完了！")
     print("改善により、価格データの特性を保持しつつ")
     print("安定した正規化処理が可能になりました。")

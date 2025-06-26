@@ -2,6 +2,7 @@
 """
 最終的な予測期間修正をテストする
 """
+
 import datetime
 import os
 import sys
@@ -99,7 +100,7 @@ def test_longer_horizon():
     """
     より長い予測期間でのテスト
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== 長期予測テスト ===")
 
     try:
@@ -156,7 +157,7 @@ def main():
     # 2. 長期予測テスト
     test_longer_horizon()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("最終修正内容:")
     print("✅ 最大予測期間をデータサイズの50%に拡大")
     print("✅ 最低予測期間を12-24時間に設定")

@@ -2,6 +2,7 @@
 """
 予測期間改善の迅速テスト
 """
+
 import datetime
 import os
 import sys
@@ -81,7 +82,7 @@ def main():
 
     success = quick_prediction_test()
 
-    print(f"\n{'='*40}")
+    print(f"\n{'=' * 40}")
     if success:
         print("テスト完了")
         print("実際のアプリケーションでの確認をお勧めします")

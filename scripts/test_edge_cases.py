@@ -2,6 +2,7 @@
 """
 2倍増加が実際に発生するエッジケースを見つけるテスト
 """
+
 import datetime
 import os
 import sys
@@ -124,7 +125,7 @@ def test_floating_point_precision():
     """
     浮動小数点精度が原因の問題をテスト
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 浮動小数点精度問題のテスト ===")
 
     base_time = datetime.datetime(2025, 6, 14, 10, 0, 0)
@@ -153,7 +154,7 @@ def main():
     test_specific_edge_cases()
     test_floating_point_precision()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("調査結果:")
     print("- エッジケースでの2倍増加条件の発生確認")
     print("- 内部ロジックの詳細分析")

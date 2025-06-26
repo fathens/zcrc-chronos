@@ -2,6 +2,7 @@
 """
 正規化処理の問題を特定するためのシンプルなテスト
 """
+
 import datetime
 import os
 import sys

@@ -52,8 +52,8 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate zcrc-chronos
-          black --check src tests
-          isort --check-only --profile black src tests
+          black --check .
+          isort --check-only --profile black .
 
   lint:
     runs-on: ubuntu-latest
@@ -100,7 +100,7 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate zcrc-chronos
-          flake8 src tests
+          flake8 .
 
 
   # 包括テスト: すべてのテストの完了を待つ集約ジョブ

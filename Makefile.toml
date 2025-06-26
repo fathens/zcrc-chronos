@@ -24,7 +24,7 @@ script = [
 description = "リント実行 (flake8)"
 script = [
     "echo '🔍 リントを実行しています...'",
-    "flake8 src tests",
+    "flake8 .",
     "echo '✅ リント完了'"
 ]
 
@@ -109,9 +109,9 @@ script = [
 description = "CIと同じチェック（並列最適化版）"
 script = [
     "echo '🔄 CI並列チェックを実行しています...'",
-    "black --check src tests",
-    "isort --check-only --profile black src tests",
-    "flake8 src tests",
+    "black --check .",
+    "isort --check-only --profile black .",
+    "flake8 .",
     "pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short",
     "echo '✅ CI並列チェック完了'"
 ]

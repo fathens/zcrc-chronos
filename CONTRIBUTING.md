@@ -309,6 +309,61 @@ pytest tests/ -k "not slow" --tb=short
   - 自動モック設定により依存関係なしでテスト実行可能
   - 基本的な予測機能とエラーハンドリングの動作確認
 
+### 新規テスト追加時のCI分割ガイド
+
+新しいテストを追加する際は、CIでの実行効率を考慮して適切なカテゴリに分類してください。
+
+#### 分割の判断基準
+
+| 条件 | 追加先 | 実行対象 |
+|------|--------|----------|
+| **高速** (5分以内) + **重要機能** | `test-matrix-lite` | 全ブランチ |
+| **重い** (5分超) または **詳細検証** | `test-matrix-heavy` | 重要ブランチのみ |
+
+#### test-matrix-lite (軽量テスト)
+全ブランチで実行されるため、**必ず高速であること**が重要です。
+
+- **Critical**: 基本API、重要機能のテスト
+  - `tests/test_api.py`, `tests/test_simple.py`, `tests/test_simple_unittest.py`
+  - `tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs`
+- **Integration**: 外部ライブラリとの統合、互換性テスト
+  - `tests/test_integration.py`, `tests/test_library_compatibility.py`
+
+#### test-matrix-heavy (重量テスト)
+重要ブランチ(`develop`, `main`, `hotfix/*`)でのみ実行されます。
+
+- **Models**: 機械学習モデル、予測ロジックのテスト
+  - `tests/test_models.py`
+- **Async**: 非同期処理、並行性のテスト
+  - `tests/test_async_prediction.py`
+- **Extended**: エッジケース、詳細検証のテスト
+  - `tests/test_predict_zero_shot.py` (InvalidInputs以外)
+
+#### 新規テスト追加の3ステップ
+
+1. **実行時間測定**: `time pytest your_test.py` で実行時間を確認
+2. **分類判断**: 5分以内なら`lite`、5分超なら`heavy`
+3. **CI設定更新**: `.github/workflows/ci.yml`の該当スイートのpytestコマンドに追加
+
+#### 注意事項
+
+- **test-matrix-lite**: Feature ブランチでも実行されるため、開発効率重視で高速であること
+- **test-matrix-heavy**: 品質保証重視で、時間がかかっても包括的であること
+- **並列実行対応**: 共有リソース（ファイル、グローバル変数等）の使用を避ける
+- **独立性**: 他のテストに影響を与えない設計にする
+
+#### CI設定での実装例
+
+```yaml
+# test-matrix-lite に追加
+pytest tests/test_api.py tests/your_fast_test.py -n auto -v --tb=short
+
+# test-matrix-heavy に追加
+pytest tests/test_models.py tests/your_heavy_test.py -v --tb=short
+```
+
+この分類により、Feature ブランチでは高速フィードバック、重要ブランチでは包括的品質保証を実現しています。
+
 ### データ処理
 - 複数の補間手法による自動時系列正規化
 - データ特性に基づくインテリジェントな補間手法選択

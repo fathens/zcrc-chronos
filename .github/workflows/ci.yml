@@ -161,7 +161,7 @@ jobs:
   # 包括テスト: 全テストを段階的に実行
   test-comprehensive:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/'))
     steps:
       - uses: actions/checkout@v4
 

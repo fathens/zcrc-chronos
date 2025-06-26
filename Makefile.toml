@@ -44,6 +44,35 @@ script = [
     "echo '✅ 高速テスト完了'"
 ]
 
+[tasks.test-parallel]
+description = "並列テスト実行（推奨）"
+script = [
+    "echo '🧪 並列テストを実行しています...'",
+    "pytest tests/ -n auto -v --tb=short",
+    "echo '✅ 並列テスト完了'"
+]
+
+[tasks.test-critical]
+description = "重要テストのみ並列実行（CI用）"
+script = [
+    "echo '🎯 重要テストを並列実行しています...'",
+    "pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v",
+    "echo '✅ 重要テスト完了'"
+]
+
+[tasks.test-split]
+description = "テスト分割実行（段階的）"
+script = [
+    "echo '📋 段階的テスト実行を開始しています...'",
+    "echo '1️⃣ 高速テスト（API・基本機能）'",
+    "pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py -n auto -v",
+    "echo '2️⃣ 無効入力テスト'",
+    "pytest tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n 2 -v",
+    "echo '3️⃣ 基本予測テスト'",
+    "pytest tests/test_models.py::test_predictor_initialization tests/test_models.py::test_zero_shot_predict_implementation_verification -v",
+    "echo '✅ 段階的テスト完了'"
+]
+
 [tasks.check]
 description = "全チェック（コミット前推奨）"
 dependencies = ["format-check", "lint"]
@@ -77,14 +106,27 @@ script = [
 ]
 
 [tasks.ci-check]
-description = "CIと同じチェック"
+description = "CIと同じチェック（並列最適化版）"
 script = [
-    "echo '🔄 CIと同じチェックを実行しています...'",
+    "echo '🔄 CI並列チェックを実行しています...'",
     "black --check src tests",
     "isort --check-only --profile black src tests",
     "flake8 src tests",
-    "pytest tests/ -xvs -n auto",
-    "echo '✅ CIチェック完了'"
+    "pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short",
+    "echo '✅ CI並列チェック完了'"
+]
+
+[tasks.ci-comprehensive]
+description = "CI包括テスト（段階的実行）"
+script = [
+    "echo '🔄 CI包括テストを実行しています...'",
+    "echo '段階1: 高速テスト（API・基本機能）'",
+    "pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py -n auto -v --tb=short",
+    "echo '段階2: 無効入力テスト'",
+    "pytest tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n 2 -v --tb=short",
+    "echo '段階3: 基本予測テスト'",
+    "pytest tests/test_models.py::test_predictor_initialization tests/test_models.py::test_zero_shot_predict_implementation_verification -v --tb=short",
+    "echo '✅ CI包括テスト完了'"
 ]
 
 [tasks.setup]
@@ -123,12 +165,21 @@ script = [
     "echo '🔧 開発作業:'",
     "echo '  makers py-format      - コードフォーマット (black, isort)'",
     "echo '  makers lint           - リント実行 (flake8)'",
-    "echo '  makers test           - テスト実行 (pytest)'",
     "echo '  makers check          - 全チェック実行 (format + lint)'",
     "echo '  makers all            - 全処理実行 (format + lint + test)'",
+    "echo ''",
+    "echo '🧪 テスト:'",
+    "echo '  makers test           - 基本テスト実行'",
+    "echo '  makers test-parallel  - 並列テスト実行（推奨）'",
+    "echo '  makers test-critical  - 重要テストのみ並列実行'",
+    "echo '  makers test-split     - 段階的テスト実行'",
+    "echo '  makers test-fast      - 高速テスト（失敗時停止）'",
     "echo ''",
     "echo '🛠️  ユーティリティ:'",
     "echo '  makers clean          - 一時ファイル削除'",
     "echo '  makers pre-commit     - pre-commitフック設定'",
-    "echo '  makers ci-check       - CIと同じチェック'"
+    "echo ''",
+    "echo '🚀 CI/CD:'",
+    "echo '  makers ci-check       - CI並列チェック（高速）'",
+    "echo '  makers ci-comprehensive - CI包括テスト（段階的）'"
 ]

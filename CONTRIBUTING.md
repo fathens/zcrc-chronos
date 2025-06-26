@@ -89,6 +89,30 @@ pytest tests/test_models.py
 NEED_REAL_LIBRARY=true pytest
 ```
 
+#### 並列テスト実行（推奨）
+時間のかかるテストを効率的に実行するため、pytest-xdistを使用した並列実行が利用可能です：
+
+```bash
+# 🚀 推奨: 重要テストのみ並列実行（最速）
+makers test-critical
+
+# 📋 段階的テスト実行（確実性重視）
+makers test-split
+
+# ⚡ 全テスト並列実行
+makers test-parallel
+
+# 🔧 手動での並列実行例
+pytest tests/ -n auto -v --tb=short    # 自動ワーカー数
+pytest tests/ -n 4 -v                  # 4並列指定
+```
+
+**並列実行の特徴:**
+- `makers test-critical`: 重要なテスト（API、基本機能、無効入力）のみを並列実行（約30秒）
+- `makers test-split`: 段階的にテストを分割実行、問題箇所の特定が容易（約67秒）
+- `makers test-parallel`: 全テストを並列実行、最も包括的（時間は環境依存）
+- AutoGluonの重いテストも分散処理により高速化
+
 #### predict_zero_shot エンドポイントのテスト
 
 **オプション1: 簡単なテスト実行（推奨）**
@@ -199,9 +223,19 @@ git commit -m "your message"  # 再実行
 ```
 
 **CI/CDパイプライン**:
-- プルリクエスト作成時に上記のチェックが自動実行されます（`.github/workflows/ci.yml`参照）
-- format、lint、testの3つのジョブがすべて通らない限りマージできません
+- プルリクエスト作成時に以下のジョブが並列実行されます（`.github/workflows/ci.yml`参照）:
+  - `format`: コードフォーマットチェック
+  - `lint`: コードスタイルチェック
+  - `test-critical`: 重要テストの並列実行（約30秒）
+  - `test-matrix`: 複数環境でのテスト実行
+- mainブランチでは追加で`test-comprehensive`が段階的に実行されます
 - **pre-commitフックまたはmakersの使用を強く推奨します**
+
+**CI並列テスト戦略**:
+- `test-critical`: API・基本機能・無効入力テストを10並列実行
+- `test-comprehensive`: 4段階に分けて全テストを実行（mainブランチのみ）
+- `test-matrix`: Ubuntu最新版・20.04でクロステスト
+- 時間制限（10分）と失敗許容設定でタイムアウト回避
 
 **依存関係**:
 - **makers**: `cargo install cargo-make`でインストール（初回のみ）

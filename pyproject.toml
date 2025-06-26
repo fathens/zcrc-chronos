@@ -60,3 +60,12 @@ norecursedirs = [
     ".git",
     "__pycache__"
 ]
+# テストマーカー定義
+markers = [
+    "slow: 実行時間の長いテスト（AutoGluon使用など）",
+    "fast: 高速実行可能なテスト",
+    "integration: 統合テスト",
+    "unit: ユニットテスト",
+    "api: APIテスト",
+    "model: モデルテスト"
+]

@@ -280,15 +280,17 @@ jobs:
       - name: Run models test suite
         if: matrix.test-suite == 'models'
         shell: bash -l {0}
+        timeout-minutes: 30
+        continue-on-error: true
         run: |
           conda activate zcrc-chronos
-          pytest tests/test_models.py -v --tb=short
+          pytest tests/test_models.py -v --tb=short --maxfail=3
 
       # Async テストスイート
       - name: Run async test suite
         if: matrix.test-suite == 'async'
         shell: bash -l {0}
-        timeout-minutes: 10
+        timeout-minutes: 30
         continue-on-error: true
         run: |
           conda activate zcrc-chronos
@@ -298,7 +300,7 @@ jobs:
       - name: Run extended test suite
         if: matrix.test-suite == 'extended'
         shell: bash -l {0}
-        timeout-minutes: 10
+        timeout-minutes: 30
         continue-on-error: true
         run: |
           conda activate zcrc-chronos

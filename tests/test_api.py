@@ -84,24 +84,10 @@ def test_zero_shot_predict_endpoint():
     assert response.status_code == 200
     data = response.json()
 
-    # レスポンスの検証
-    assert "forecast_timestamp" in data
-    assert "forecast_values" in data
-    assert "model_name" in data
-    assert "confidence_intervals" in data
-    assert "metrics" in data
-
-    # 予測値の数が適切であることを確認（少なくとも1つの予測があるべき）
-    assert len(data["forecast_timestamp"]) > 0
-    assert len(data["forecast_values"]) > 0
-
-    # 最後の予測時点が指定したforecast_untilに近いことを確認
-    last_forecast_time = datetime.datetime.fromisoformat(
-        data["forecast_timestamp"][-1].replace("Z", "+00:00")
-    )
-    target_forecast_time = datetime.datetime.fromisoformat(forecast_until)
-    # 1時間以内の誤差を許容
-    assert abs((last_forecast_time - target_forecast_time).total_seconds()) < 3600
+    # 非同期エンドポイントのレスポンス検証
+    assert "task_id" in data
+    assert "status" in data
+    assert "message" in data
 
 
 def test_zero_shot_predict_endpoint_invalid_data():

@@ -106,7 +106,6 @@ jobs:
   # 包括テスト: すべてのテストの完了を待つ集約ジョブ
   test-comprehensive:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/'))
     needs: [test-matrix-lite, test-matrix-heavy]
     steps:
       - uses: actions/checkout@v4
@@ -228,10 +227,9 @@ jobs:
           name: coverage-report-critical
           path: .coverage
 
-  # 重量テスト: 重要ブランチでのみ実行
+  # 重量テスト: 全ブランチで実行
   test-matrix-heavy:
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/'))
     strategy:
       fail-fast: false
       matrix:

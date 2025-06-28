@@ -113,7 +113,7 @@ pytest tests/ -n 4 -v                  # 4並列指定
 - `makers test-parallel`: 全テストを並列実行、最も包括的（時間は環境依存）
 - AutoGluonの重いテストも分散処理により高速化
 
-#### predict_zero_shot エンドポイントのテスト
+#### predict_zero_shot_async エンドポイントのテスト
 
 **オプション1: 簡単なテスト実行（推奨）**
 ```bash
@@ -123,7 +123,7 @@ python test_predict_simple.py
 
 **オプション2: フルテストスイート実行**
 ```bash
-# predict_zero_shot の包括的テスト実行
+# predict_zero_shot_async の包括的テスト実行
 pytest tests/test_predict_zero_shot.py -v
 
 # 特定のテストクラス実行
@@ -254,7 +254,7 @@ docker compose down
 ## 主要コンポーネント
 
 ### APIルート (`src/api/routes.py`)
-- **POST /api/v1/predict_zero_shot**: 包括的バリデーション付きメイン予測エンドポイント
+- **POST /api/v1/predict_zero_shot_async**: 包括的バリデーション付き非同期予測エンドポイント
 - **GET /api/v1/models**: 利用可能モデル一覧取得
 - **GET /api/v1/health**: ヘルスチェックエンドポイント
 - 自動補間手法選択による高度なデータ正規化ロジックを含む
@@ -296,11 +296,11 @@ pytest tests/ -k "not slow" --tb=short
 ```
 
 **特に重要**: エラーハンドリング変更時は、エラーコードを期待する全テストを確認する。影響範囲の例：
-- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト
+- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト（現在は predict_zero_shot_async エンドポイントをテスト）
 - Mockロジック変更 → 同一テストファイル内の全テスト
 
 #### 主要テストファイル
-- `tests/test_predict_zero_shot.py`: predict_zero_shotエンドポイントの包括的テストスイート
+- `tests/test_predict_zero_shot.py`: predict_zero_shot_asyncエンドポイントの包括的テストスイート
   - 正常入力テスト（基本予測、最小データポイント、異なる予測期間、不規則間隔データ等）
   - 無効入力テスト（データ不足、長さ不一致、過去の予測時点、時間間隔エラー等）
   - エッジケーステスト（信頼区間、評価指標、大データセット、極端値等）

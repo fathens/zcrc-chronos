@@ -80,7 +80,7 @@ def test_zero_shot_predict_endpoint():
         "model_name": "chronos_default",
     }
 
-    response = client.post("/api/v1/predict_zero_shot", json=request_data)
+    response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
     assert response.status_code == 200
     data = response.json()
 
@@ -126,7 +126,7 @@ def test_zero_shot_predict_endpoint_invalid_data():
         "model_name": "chronos_default",
     }
 
-    response = client.post("/api/v1/predict_zero_shot", json=invalid_data)
+    response = client.post("/api/v1/predict_zero_shot_async", json=invalid_data)
     # バリデーションエラーが発生することを期待
     assert response.status_code == 422
 

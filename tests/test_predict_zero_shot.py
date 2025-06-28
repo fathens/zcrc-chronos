@@ -35,7 +35,7 @@ class TestPredictZeroShotValidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -63,7 +63,7 @@ class TestPredictZeroShotValidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         # データポイントが不十分な場合は400エラーが期待される（クライアントエラー）
         assert response.status_code == 400
 
@@ -93,7 +93,9 @@ class TestPredictZeroShotValidInputs:
             "model_name": "chronos_default",
         }
 
-        response_short = client.post("/api/v1/predict_zero_shot", json=request_short)
+        response_short = client.post(
+            "/api/v1/predict_zero_shot_async", json=request_short
+        )
         assert response_short.status_code == 200
 
         # 長期予測（24時間）
@@ -105,7 +107,9 @@ class TestPredictZeroShotValidInputs:
             "model_name": "chronos_default",
         }
 
-        response_long = client.post("/api/v1/predict_zero_shot", json=request_long)
+        response_long = client.post(
+            "/api/v1/predict_zero_shot_async", json=request_long
+        )
         assert response_long.status_code == 200
 
         # 長期予測の方が多くの予測ポイントを持つことを確認
@@ -133,7 +137,7 @@ class TestPredictZeroShotValidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -157,7 +161,7 @@ class TestPredictZeroShotValidInputs:
             "model_params": {"seasonality_mode": "additive"},
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -181,7 +185,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 400
         assert "少なくとも2つのデータポイントが必要です" in response.json()["detail"]
 
@@ -203,7 +207,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 422  # Pydantic validation error
 
     def test_forecast_until_in_past(self):
@@ -223,7 +227,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 400
         assert "予測時点が最新のデータポイント以前です" in response.json()["detail"]
 
@@ -241,7 +245,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 400
         assert "タイムスタンプの間隔が正しくありません" in response.json()["detail"]
 
@@ -269,7 +273,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         # 正規化プロセスでタイムスタンプがソートされ、正常に処理される場合もある
         assert response.status_code in [200, 400]
 
@@ -300,7 +304,7 @@ class TestPredictZeroShotInvalidInputs:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 500  # 空のデータでmax()エラーが発生
 
     def test_invalid_model_name(self):
@@ -318,7 +322,7 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         # 無効なモデル名でも実行される（モデル内部で処理）
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         # データ不足により400エラー、またはサーバーエラーの可能性があるため、400または500を許容
         assert response.status_code in [400, 500]
 
@@ -342,7 +346,7 @@ class TestPredictZeroShotEdgeCases:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -368,7 +372,7 @@ class TestPredictZeroShotEdgeCases:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -397,7 +401,7 @@ class TestPredictZeroShotEdgeCases:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -420,7 +424,7 @@ class TestPredictZeroShotEdgeCases:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()
@@ -449,7 +453,7 @@ class TestPredictZeroShotEdgeCases:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         # 極端な値でも処理される（警告やエラーの可能性はある）
         assert response.status_code in [200, 400, 500]
 
@@ -501,7 +505,7 @@ class TestPredictZeroShotIntegration:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         # モックが機能している場合とそうでない場合の両方を処理
@@ -555,7 +559,7 @@ class TestPredictZeroShotIntegration:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         # モックが機能しない場合は実際のライブラリが動作して200を返す可能性がある
         assert response.status_code in [200, 500]
 
@@ -608,7 +612,7 @@ class TestPredictZeroShotIntegration:
             "model_name": "chronos_default",
         }
 
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         assert response.status_code == 200
 
         data = response.json()

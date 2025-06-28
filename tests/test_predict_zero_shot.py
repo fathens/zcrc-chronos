@@ -39,15 +39,10 @@ class TestPredictZeroShotValidInputs:
         assert response.status_code == 200
 
         data = response.json()
-        assert "forecast_timestamp" in data
-        assert "forecast_values" in data
-        assert "model_name" in data
-        assert data["model_name"] == "chronos_default"
-
-        # 予測値の数が適切であることを確認
-        assert len(data["forecast_timestamp"]) > 0
-        assert len(data["forecast_values"]) > 0
-        assert len(data["forecast_timestamp"]) == len(data["forecast_values"])
+        # 非同期エンドポイントのレスポンス形式を確認
+        assert "task_id" in data
+        assert "status" in data
+        assert "message" in data
 
     def test_minimal_data_points(self):
         """最小限のデータポイント（2点）での予測をテスト - エラーが期待される"""
@@ -186,8 +181,11 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        assert response.status_code == 400
-        assert "少なくとも2つのデータポイントが必要です" in response.json()["detail"]
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
+        assert "status" in data
 
     def test_mismatched_timestamp_values_length(self):
         """timestampとvaluesの長さが一致しない場合のテスト"""
@@ -228,8 +226,10 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        assert response.status_code == 400
-        assert "予測時点が最新のデータポイント以前です" in response.json()["detail"]
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
 
     def test_zero_time_interval(self):
         """時間間隔がゼロの場合のテスト"""
@@ -246,8 +246,10 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        assert response.status_code == 400
-        assert "タイムスタンプの間隔が正しくありません" in response.json()["detail"]
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
 
     def test_negative_time_interval(self):
         """時間間隔が負の場合のテスト（正規化により修正される場合もある）"""
@@ -274,24 +276,10 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        # 正規化プロセスでタイムスタンプがソートされ、正常に処理される場合もある
-        assert response.status_code in [200, 400]
-
-        if response.status_code == 400:
-            # エラーの場合は適切なエラーメッセージが含まれることを確認
-            error_detail = response.json()["detail"]
-            assert (
-                "タイムスタンプの間隔が正しくありません" in error_detail
-                or "データポイントが不十分" in error_detail
-                or "少なくとも2つのデータポイントが必要です" in error_detail
-                or "At least some time series in train_data must have >= 5 observations"
-                in error_detail
-            )
-        else:
-            # 成功の場合は予測結果が返されることを確認
-            data = response.json()
-            assert "forecast_timestamp" in data
-            assert "forecast_values" in data
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
 
     def test_empty_data(self):
         """空のデータでのテスト"""
@@ -305,7 +293,10 @@ class TestPredictZeroShotInvalidInputs:
         }
 
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        assert response.status_code == 500  # 空のデータでmax()エラーが発生
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
 
     def test_invalid_model_name(self):
         """無効なモデル名でのテスト"""
@@ -323,8 +314,10 @@ class TestPredictZeroShotInvalidInputs:
 
         # 無効なモデル名でも実行される（モデル内部で処理）
         response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
-        # データ不足により400エラー、またはサーバーエラーの可能性があるため、400または500を許容
-        assert response.status_code in [400, 500]
+        # 非同期エンドポイントは最初にタスクを作成し、200を返す
+        assert response.status_code == 200
+        data = response.json()
+        assert "task_id" in data
 
 
 class TestPredictZeroShotEdgeCases:

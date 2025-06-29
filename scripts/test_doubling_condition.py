@@ -2,6 +2,7 @@
 """
 データポイント2倍増加が発生する条件をテストする
 """
+
 import datetime
 import os
 import sys
@@ -110,7 +111,7 @@ def test_realistic_trading_scenario():
     """
     実際の取引データのようなシナリオをテスト
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 実際の取引データシナリオ ===")
 
     base_time = datetime.datetime(2025, 6, 14, 9, 0, 0)  # 取引開始時刻
@@ -129,7 +130,7 @@ def test_realistic_trading_scenario():
 
     print(f"データ点数: {len(hft_timestamps)}")
     print(
-        f"時間範囲: {(hft_timestamps[-1] - hft_timestamps[0]).total_seconds()/3600:.1f}時間"
+        f"時間範囲: {(hft_timestamps[-1] - hft_timestamps[0]).total_seconds() / 3600:.1f}時間"
     )
     test_normalization("hft", hft_timestamps, hft_values)
 
@@ -159,7 +160,7 @@ def main():
     test_doubling_trigger_conditions()
     test_realistic_trading_scenario()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("テスト結果まとめ:")
     print("- 2倍増加が発生する具体的条件を特定")
     print("- 実際の取引データでの動作確認")

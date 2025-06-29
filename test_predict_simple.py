@@ -75,7 +75,7 @@ def test_basic_functionality():
     # APIエンドポイントをテスト
     print("\nAPIエンドポイントをテスト中...")
     try:
-        response = client.post("/api/v1/predict_zero_shot", json=request_data)
+        response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
         print(f"レスポンス ステータス: {response.status_code}")
 
         if response.status_code == 200:
@@ -127,7 +127,9 @@ def test_error_cases():
     }
 
     try:
-        response = client.post("/api/v1/predict_zero_shot", json=insufficient_data)
+        response = client.post(
+            "/api/v1/predict_zero_shot_async", json=insufficient_data
+        )
         if response.status_code == 400:
             print("✅ データポイント不足エラーが正しく検出されました")
         else:

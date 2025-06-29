@@ -169,7 +169,7 @@ def test_interpolation_methods():
             print(f"{method}補間:")
             print(f"  元データ範囲: {orig_min:.1f} - {orig_max:.1f}")
             print(f"  正規化後範囲: {norm_min:.1f} - {norm_max:.1f}")
-            print(f"  最大値保持率: {norm_max/orig_max:.2%}")
+            print(f"  最大値保持率: {norm_max / orig_max:.2%}")
             print(f"  データポイント数: {len(timestamps)} → {len(norm_values)}")
 
         except Exception as e:
@@ -218,7 +218,7 @@ def main():
     test_patterns = create_test_data_with_patterns()
 
     for pattern_name, (timestamps, values) in test_patterns.items():
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"{pattern_name.upper()} パターンのテスト")
         print("{'='*50}")
 
@@ -247,7 +247,7 @@ def main():
     # 3. データポイント倍増の影響
     test_data_point_multiplication_effect()
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("分析完了")
     print("{'='*50}")
     print("主な発見:")

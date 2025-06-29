@@ -2,6 +2,7 @@
 """
 柔軟な予測期間設定のテスト
 """
+
 import datetime
 import os
 import sys
@@ -87,7 +88,7 @@ def test_edge_cases():
     """
     エッジケースのテスト
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== エッジケーステスト ===")
 
     test_cases = [
@@ -148,7 +149,7 @@ def main():
     # 2. エッジケーステスト
     test_edge_cases()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("改善された機能:")
     print("✅ 短期予測（4-6時間）から長期予測（12-24時間）まで対応")
     print("✅ 要求された予測期間を可能な限り保持")

@@ -2,6 +2,7 @@
 """
 本番環境での直線的予測問題をデバッグするスクリプト
 """
+
 import datetime
 import os
 import sys
@@ -76,7 +77,8 @@ def debug_current_implementation():
         orig_range = max(values) - min(values)
         norm_range = max(norm_values) - min(norm_values)
         print(
-            f"  変動保持: {orig_range:.0f} → {norm_range:.0f} ({norm_range/orig_range:.2%})"
+            f"  変動保持: {orig_range:.0f} → {norm_range:.0f} "
+            f"({norm_range / orig_range:.2%})"
         )
 
         # STEP 2: 予測処理の確認
@@ -145,7 +147,7 @@ def check_model_exclusion():
     """
     Naiveモデル除外が機能しているかチェック
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== Naiveモデル除外チェック ===")
 
     try:
@@ -184,7 +186,7 @@ def verify_code_changes():
     """
     コードの変更が実際に反映されているか確認
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== コード変更確認 ===")
 
     try:
@@ -234,7 +236,7 @@ def main():
     # 3. コード変更の確認
     verify_code_changes()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("デバッグ完了")
 
     if result is None:

@@ -2,6 +2,7 @@
 """
 改善された正規化処理をテストするスクリプト
 """
+
 import datetime
 import os
 import sys
@@ -129,7 +130,7 @@ def test_outlier_detection_improvement():
     """
     外れ値検出の改善をテスト
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 外れ値検出の改善テスト ===")
 
     # 価格データによくある「正常な」変動パターン
@@ -142,7 +143,7 @@ def test_outlier_detection_improvement():
     base_time = datetime.datetime(2025, 6, 14, 10, 0, 0)
 
     for i, values in enumerate(normal_price_variations):
-        print(f"\nテストケース {i+1}: {values}")
+        print(f"\nテストケース {i + 1}: {values}")
 
         timestamps = [
             base_time + datetime.timedelta(hours=j) for j in range(len(values))
@@ -199,7 +200,7 @@ def main():
     test_outlier_detection_improvement()
 
     # 3. 結果サマリー
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== テスト結果サマリー ===")
     print("選択された補間方法:")
     for pattern, method in results.items():

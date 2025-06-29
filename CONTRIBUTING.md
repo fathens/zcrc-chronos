@@ -113,7 +113,7 @@ pytest tests/ -n 4 -v                  # 4並列指定
 - `makers test-parallel`: 全テストを並列実行、最も包括的（時間は環境依存）
 - AutoGluonの重いテストも分散処理により高速化
 
-#### predict_zero_shot エンドポイントのテスト
+#### predict_zero_shot_async エンドポイントのテスト
 
 **オプション1: 簡単なテスト実行（推奨）**
 ```bash
@@ -123,7 +123,7 @@ python test_predict_simple.py
 
 **オプション2: フルテストスイート実行**
 ```bash
-# predict_zero_shot の包括的テスト実行
+# predict_zero_shot_async の包括的テスト実行
 pytest tests/test_predict_zero_shot.py -v
 
 # 特定のテストクラス実行
@@ -254,7 +254,7 @@ docker compose down
 ## 主要コンポーネント
 
 ### APIルート (`src/api/routes.py`)
-- **POST /api/v1/predict_zero_shot**: 包括的バリデーション付きメイン予測エンドポイント
+- **POST /api/v1/predict_zero_shot_async**: 包括的バリデーション付き非同期予測エンドポイント
 - **GET /api/v1/models**: 利用可能モデル一覧取得
 - **GET /api/v1/health**: ヘルスチェックエンドポイント
 - 自動補間手法選択による高度なデータ正規化ロジックを含む
@@ -296,11 +296,11 @@ pytest tests/ -k "not slow" --tb=short
 ```
 
 **特に重要**: エラーハンドリング変更時は、エラーコードを期待する全テストを確認する。影響範囲の例：
-- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト
+- `routes.py`のエラーハンドリング変更 → `test_predict_zero_shot.py`の全InvalidInputsテスト（現在は predict_zero_shot_async エンドポイントをテスト）
 - Mockロジック変更 → 同一テストファイル内の全テスト
 
 #### 主要テストファイル
-- `tests/test_predict_zero_shot.py`: predict_zero_shotエンドポイントの包括的テストスイート
+- `tests/test_predict_zero_shot.py`: predict_zero_shot_asyncエンドポイントの包括的テストスイート
   - 正常入力テスト（基本予測、最小データポイント、異なる予測期間、不規則間隔データ等）
   - 無効入力テスト（データ不足、長さ不一致、過去の予測時点、時間間隔エラー等）
   - エッジケーステスト（信頼区間、評価指標、大データセット、極端値等）
@@ -308,6 +308,61 @@ pytest tests/ -k "not slow" --tb=short
 - `test_predict_simple.py`: autogluonライブラリなしでの基本動作確認用スクリプト
   - 自動モック設定により依存関係なしでテスト実行可能
   - 基本的な予測機能とエラーハンドリングの動作確認
+
+### 新規テスト追加時のCI分割ガイド
+
+新しいテストを追加する際は、CIでの実行効率を考慮して適切なカテゴリに分類してください。
+
+#### 分割の判断基準
+
+| 条件 | 追加先 | 実行対象 |
+|------|--------|----------|
+| **高速** (5分以内) + **重要機能** | `test-matrix-lite` | 全ブランチ |
+| **重い** (5分超) または **詳細検証** | `test-matrix-heavy` | 重要ブランチのみ |
+
+#### test-matrix-lite (軽量テスト)
+全ブランチで実行されるため、**必ず高速であること**が重要です。
+
+- **Critical**: 基本API、重要機能のテスト
+  - `tests/test_api.py`, `tests/test_simple.py`, `tests/test_simple_unittest.py`
+  - `tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs`
+- **Integration**: 外部ライブラリとの統合、互換性テスト
+  - `tests/test_integration.py`, `tests/test_library_compatibility.py`
+
+#### test-matrix-heavy (重量テスト)
+重要ブランチ(`develop`, `main`, `hotfix/*`)でのみ実行されます。
+
+- **Models**: 機械学習モデル、予測ロジックのテスト
+  - `tests/test_models.py`
+- **Async**: 非同期処理、並行性のテスト
+  - `tests/test_async_prediction.py`
+- **Extended**: エッジケース、詳細検証のテスト
+  - `tests/test_predict_zero_shot.py` (InvalidInputs以外)
+
+#### 新規テスト追加の3ステップ
+
+1. **実行時間測定**: `time pytest your_test.py` で実行時間を確認
+2. **分類判断**: 5分以内なら`lite`、5分超なら`heavy`
+3. **CI設定更新**: `.github/workflows/ci.yml`の該当スイートのpytestコマンドに追加
+
+#### 注意事項
+
+- **test-matrix-lite**: Feature ブランチでも実行されるため、開発効率重視で高速であること
+- **test-matrix-heavy**: 品質保証重視で、時間がかかっても包括的であること
+- **並列実行対応**: 共有リソース（ファイル、グローバル変数等）の使用を避ける
+- **独立性**: 他のテストに影響を与えない設計にする
+
+#### CI設定での実装例
+
+```yaml
+# test-matrix-lite に追加
+pytest tests/test_api.py tests/your_fast_test.py -n auto -v --tb=short
+
+# test-matrix-heavy に追加
+pytest tests/test_models.py tests/your_heavy_test.py -v --tb=short
+```
+
+この分類により、Feature ブランチでは高速フィードバック、重要ブランチでは包括的品質保証を実現しています。
 
 ### データ処理
 - 複数の補間手法による自動時系列正規化

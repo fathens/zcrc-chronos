@@ -2,6 +2,7 @@
 """
 AutoGluonの実際の動作を調査するデバッグスクリプト
 """
+
 import datetime
 import os
 import sys
@@ -63,7 +64,9 @@ def debug_autogluon_model_selection():
 
         # 予測実行（短い予測期間で試す）
         pred_timestamps, result, metadata = predictor.zero_shot_predict(
-            timestamp=timestamps, values=values, horizon=24  # 24時間の予測
+            timestamp=timestamps,
+            values=values,
+            horizon=24,  # 24時間の予測
         )
 
         print("\n予測結果:")
@@ -123,7 +126,7 @@ def test_different_data_sizes():
     """
     異なるデータサイズでの動作確認
     """
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("=== 異なるデータサイズでのテスト ===")
 
     data_sizes = [10, 50, 100, 200]
@@ -175,7 +178,7 @@ def main():
     # 2. 異なるデータサイズでのテスト
     test_different_data_sizes()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("調査完了")
     print("直線的な予測の原因を特定するため、")
     print("実際に使用されているモデルとその設定を確認しました。")

@@ -2,6 +2,7 @@
 """
 改善された予測ロジックをテストする
 """
+
 import datetime
 import os
 import sys
@@ -92,7 +93,7 @@ def test_different_horizons():
     """
     異なる予測期間でのテスト
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== 異なる予測期間でのテスト ===")
 
     horizons = [6, 12, 24, 48]
@@ -148,7 +149,7 @@ def main():
     # 2. 異なる予測期間でのテスト
     test_different_horizons()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("テスト完了")
     print("\n実装した改善:")
     print("✅ 予測期間制限を大幅に緩和（データサイズの25%まで）")

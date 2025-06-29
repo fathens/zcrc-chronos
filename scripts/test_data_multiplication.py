@@ -2,6 +2,7 @@
 """
 データポイント倍増問題を詳細に調査するテスト
 """
+
 import datetime
 import os
 import sys
@@ -86,7 +87,7 @@ def test_actual_price_scenario():
     """
     実際の価格データシナリオをテスト
     """
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("=== 実際の価格データシナリオテスト ===")
 
     # スクリーンショットのような価格変動パターンを模擬
@@ -190,7 +191,7 @@ def main():
     test_data_point_multiplication()
     test_actual_price_scenario()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("調査結果まとめ:")
     print("1. データポイント増加率とその原因を特定")
     print("2. 不規則間隔データでの動作確認")

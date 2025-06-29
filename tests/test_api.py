@@ -80,28 +80,14 @@ def test_zero_shot_predict_endpoint():
         "model_name": "chronos_default",
     }
 
-    response = client.post("/api/v1/predict_zero_shot", json=request_data)
+    response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
     assert response.status_code == 200
     data = response.json()
 
-    # レスポンスの検証
-    assert "forecast_timestamp" in data
-    assert "forecast_values" in data
-    assert "model_name" in data
-    assert "confidence_intervals" in data
-    assert "metrics" in data
-
-    # 予測値の数が適切であることを確認（少なくとも1つの予測があるべき）
-    assert len(data["forecast_timestamp"]) > 0
-    assert len(data["forecast_values"]) > 0
-
-    # 最後の予測時点が指定したforecast_untilに近いことを確認
-    last_forecast_time = datetime.datetime.fromisoformat(
-        data["forecast_timestamp"][-1].replace("Z", "+00:00")
-    )
-    target_forecast_time = datetime.datetime.fromisoformat(forecast_until)
-    # 1時間以内の誤差を許容
-    assert abs((last_forecast_time - target_forecast_time).total_seconds()) < 3600
+    # 非同期エンドポイントのレスポンス検証
+    assert "task_id" in data
+    assert "status" in data
+    assert "message" in data
 
 
 def test_zero_shot_predict_endpoint_invalid_data():
@@ -126,7 +112,7 @@ def test_zero_shot_predict_endpoint_invalid_data():
         "model_name": "chronos_default",
     }
 
-    response = client.post("/api/v1/predict_zero_shot", json=invalid_data)
+    response = client.post("/api/v1/predict_zero_shot_async", json=invalid_data)
     # バリデーションエラーが発生することを期待
     assert response.status_code == 422
 
@@ -564,3 +550,122 @@ def test_normalize_time_series_data_edge_cases():
     )
     assert len(normalized_timestamps_reverse) >= len(timestamps_reverse)
     assert len(normalized_values_reverse) == len(normalized_timestamps_reverse)
+
+
+class TestAsyncPredictionIntegration:
+    """非同期予測APIの統合テスト"""
+
+    def test_async_prediction_basic_flow(self):
+        """基本的な非同期予測フローのテスト"""
+        # テスト用のリクエストデータを作成
+        now = datetime.datetime.now()
+        timestamps = [
+            (now - datetime.timedelta(hours=i)).isoformat() for i in range(12, 0, -1)
+        ]
+        values = [10.0 + i * 0.1 for i in range(12)]
+
+        last_timestamp = datetime.datetime.fromisoformat(timestamps[-1])
+        forecast_until = (last_timestamp + datetime.timedelta(hours=6)).isoformat()
+
+        request_data = {
+            "timestamp": timestamps,
+            "values": values,
+            "forecast_until": forecast_until,
+            "model_name": "chronos_default",
+        }
+
+        # 1. 非同期予測を開始
+        async_response = client.post(
+            "/api/v1/predict_zero_shot_async", json=request_data
+        )
+        assert async_response.status_code == 200
+
+        async_data = async_response.json()
+        assert "task_id" in async_data
+        assert async_data["status"] == "pending"
+        task_id = async_data["task_id"]
+
+        # 2. タスクリストでタスクの存在を確認
+        tasks_response = client.get("/api/v1/prediction_tasks")
+        assert tasks_response.status_code == 200
+        tasks = tasks_response.json()
+        task_found = any(task["task_id"] == task_id for task in tasks)
+        assert task_found
+
+        # 3. ステータスを確認
+        status_response = client.get(f"/api/v1/prediction_status/{task_id}")
+        assert status_response.status_code == 200
+        status_data = status_response.json()
+        assert status_data["task_id"] == task_id
+        assert status_data["status"] in ["pending", "running", "completed", "failed"]
+
+    def test_async_prediction_cancellation_integration(self):
+        """非同期予測キャンセル機能の統合テスト"""
+        now = datetime.datetime.now()
+        request_data = {
+            "timestamp": [
+                (now - datetime.timedelta(hours=2)).isoformat(),
+                (now - datetime.timedelta(hours=1)).isoformat(),
+            ],
+            "values": [10.0, 11.0],
+            "forecast_until": (now + datetime.timedelta(hours=1)).isoformat(),
+        }
+
+        # 1. 非同期予測を開始
+        async_response = client.post(
+            "/api/v1/predict_zero_shot_async", json=request_data
+        )
+        task_id = async_response.json()["task_id"]
+
+        # 2. キャンセルを実行
+        cancel_response = client.delete(f"/api/v1/prediction_cancel/{task_id}")
+        assert cancel_response.status_code == 200
+
+        cancel_data = cancel_response.json()
+        assert cancel_data["task_id"] == task_id
+
+        # 3. ステータスがキャンセルになっていることを確認
+        import time
+
+        time.sleep(0.5)  # キャンセル処理が反映されるまで少し待つ
+
+        status_response = client.get(f"/api/v1/prediction_status/{task_id}")
+        status_data = status_response.json()
+        assert status_data["status"] == "cancelled"
+
+    def test_multiple_async_predictions(self):
+        """複数の非同期予測の並行実行テスト"""
+        now = datetime.datetime.now()
+        base_request = {
+            "timestamp": [
+                (now - datetime.timedelta(hours=3)).isoformat(),
+                (now - datetime.timedelta(hours=2)).isoformat(),
+                (now - datetime.timedelta(hours=1)).isoformat(),
+            ],
+            "values": [10.0, 11.0, 12.0],
+            "forecast_until": (now + datetime.timedelta(hours=2)).isoformat(),
+        }
+
+        # 3つの予測タスクを開始
+        task_ids = []
+        for i in range(3):
+            request_data = base_request.copy()
+            response = client.post("/api/v1/predict_zero_shot_async", json=request_data)
+            assert response.status_code == 200
+            task_ids.append(response.json()["task_id"])
+
+        # すべてのタスクが作成されたことを確認
+        assert len(task_ids) == 3
+        assert len(set(task_ids)) == 3  # すべてユニーク
+
+        # タスクリストで全タスクが表示されることを確認
+        tasks_response = client.get("/api/v1/prediction_tasks")
+        tasks = tasks_response.json()
+        assert len(tasks) >= 3
+
+        # 各タスクのステータスが確認できることを検証
+        for task_id in task_ids:
+            status_response = client.get(f"/api/v1/prediction_status/{task_id}")
+            assert status_response.status_code == 200
+            status_data = status_response.json()
+            assert status_data["task_id"] == task_id

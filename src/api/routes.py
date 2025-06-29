@@ -4,15 +4,16 @@ APIルーティングを定義するモジュール
 
 import datetime
 import os
+import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import yaml
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel, field_validator
 
@@ -48,8 +49,111 @@ config = load_config()
 # APIルーターの作成
 router = APIRouter()
 
-# 非同期タスク管理用のグローバル辞書
-prediction_tasks: Dict[str, "PredictionResult"] = {}
+# 非同期タスク管理クラス
+
+
+class TaskManager:
+    """スレッドセーフなタスク管理クラス"""
+
+    def __init__(self, max_tasks: int = 1000, cleanup_interval_hours: int = 24):
+        self._tasks: Dict[str, "PredictionResult"] = {}
+        self._futures: Dict[str, Future] = {}
+        self._lock = threading.RLock()
+        self._max_tasks = max_tasks
+        self._cleanup_interval_hours = cleanup_interval_hours
+
+    def add_task(self, task_id: str, task: "PredictionResult", future: Future = None):
+        """タスクを追加"""
+        with self._lock:
+            # 最大タスク数の制限
+            if len(self._tasks) >= self._max_tasks:
+                self._cleanup_old_tasks()
+
+            self._tasks[task_id] = task
+            if future:
+                self._futures[task_id] = future
+
+    def get_task(self, task_id: str) -> Optional["PredictionResult"]:
+        """タスクを取得"""
+        with self._lock:
+            return self._tasks.get(task_id)
+
+    def get_all_tasks(self) -> List["PredictionResult"]:
+        """すべてのタスクを取得"""
+        with self._lock:
+            return list(self._tasks.values())
+
+    def update_task(self, task_id: str, **kwargs):
+        """タスクを更新"""
+        with self._lock:
+            if task_id in self._tasks:
+                task = self._tasks[task_id]
+                for key, value in kwargs.items():
+                    if hasattr(task, key):
+                        setattr(task, key, value)
+                task.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    def cancel_task(self, task_id: str) -> bool:
+        """タスクをキャンセル"""
+        with self._lock:
+            if task_id in self._futures:
+                future = self._futures[task_id]
+                if future.cancel():
+                    self.update_task(
+                        task_id,
+                        status=PredictionStatus.CANCELLED,
+                        message="タスクがキャンセルされました",
+                    )
+                    return True
+                else:
+                    # 既に実行中の場合は状態のみ更新
+                    self.update_task(
+                        task_id,
+                        status=PredictionStatus.CANCELLED,
+                        message="タスクのキャンセルが要求されました",
+                    )
+                    return False
+            return False
+
+    def _cleanup_old_tasks(self):
+        """古いタスクをクリーンアップ"""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cutoff_time = now - datetime.timedelta(hours=self._cleanup_interval_hours)
+
+        tasks_to_remove = []
+        for task_id, task in self._tasks.items():
+            if task.updated_at < cutoff_time:
+                tasks_to_remove.append(task_id)
+
+        for task_id in tasks_to_remove:
+            del self._tasks[task_id]
+            if task_id in self._futures:
+                del self._futures[task_id]
+
+    def cleanup_completed_tasks(self):
+        """完了したタスクをクリーンアップ"""
+        with self._lock:
+            tasks_to_remove = []
+            for task_id, task in self._tasks.items():
+                if task.status in [
+                    PredictionStatus.COMPLETED,
+                    PredictionStatus.FAILED,
+                    PredictionStatus.CANCELLED,
+                ]:
+                    # 完了から1時間経過したタスクを削除
+                    if (
+                        datetime.datetime.now(datetime.timezone.utc) - task.updated_at
+                    ).total_seconds() > 3600:
+                        tasks_to_remove.append(task_id)
+
+            for task_id in tasks_to_remove:
+                del self._tasks[task_id]
+                if task_id in self._futures:
+                    del self._futures[task_id]
+
+
+# グローバルタスクマネージャーのインスタンス
+task_manager = TaskManager()
 
 # ThreadPoolExecutor for running prediction tasks
 executor = ThreadPoolExecutor(max_workers=4)
@@ -264,6 +368,7 @@ class PredictionStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class AsyncPredictionRequest(BaseModel):
@@ -332,169 +437,32 @@ async def get_models():
         raise HTTPException(status_code=500, detail="モデル情報の取得に失敗しました")
 
 
-# ゼロショット予測エンドポイント
-@router.post("/predict_zero_shot", response_model=PredictionResponse)
-async def predict_zero_shot(request: ZeroShotPredictionRequest):
-    """
-    時系列データに基づくゼロショット予測を実行
-
-    過去の時系列データから将来の値を予測するAPIエンドポイントです。
-    「ゼロショット」とは、追加の訓練なしで予測を行うことを意味します。
-
-    Parameters:
-        request (ZeroShotPredictionRequest): 予測リクエスト
-            - **timestamp**: 時系列データのタイムスタンプのリスト
-              過去の時系列データの時間情報を示します。日時形式（ISO 8601）で指定。
-
-            - **values**: 時系列データの値のリスト
-              timestampに対応する観測値または実測値。数値の配列で指定。
-
-            - **forecast_until**: 予測したい時点（datetime形式）
-              この時点までの将来値が予測されます。最後のタイムスタンプより未来の日時を指定。
-
-            - **model_name**: 使用する予測モデルの名前（オプション、デフォルト: "chronos_default"）
-              利用可能なモデルは GET /models エンドポイントで確認できます。
-
-            - **model_params**: モデルに渡す追加パラメータ（オプション）
-              モデル固有のパラメータを辞書形式で指定できます。
-
-    Returns:
-        PredictionResponse: 予測結果
-            - **forecast_timestamp**: 予測された将来時点のリスト
-            - **forecast_values**: 予測値のリスト
-            - **model_name**: 使用されたモデル名
-            - **confidence_intervals**: 信頼区間（提供されている場合）
-            - **metrics**: 予測性能の評価指標（提供されている場合）
-
-    Raises:
-        HTTPException (400): 以下の場合にエラーを返します
-            - データポイントが2点未満の場合
-            - タイムスタンプの間隔が不正（ゼロまたは負の値）の場合
-            - 予測時点が最新のデータポイント以前の場合
-        HTTPException (500): 予測処理中に内部エラーが発生した場合
-
-    Example:
-        ```bash
-        curl -X 'POST' \\
-          'http://localhost:8000/api/v1/predict_zero_shot' \\
-          -H 'Content-Type: application/json' \\
-          -d '{
-            "timestamp": [
-              "2023-01-01T00:00:00",
-              "2023-01-01T01:00:00"
-            ],
-            "values": [10.5, 11.2],
-            "forecast_until": "2023-01-04T02:00:00",
-            "model_name": "chronos_default"
-        }'
-        ```
-    """
-    try:
-        logger.info("ゼロショット予測APIが呼び出されました")
-
-        # 時系列データの正規化
-        normalized_timestamps, normalized_values = normalize_time_series_data(
-            request.timestamp, request.values, interpolation_method="auto"
-        )
-
-        # 最後のタイムスタンプを取得
-        latest_timestamp = max(normalized_timestamps)
-
-        # タイムスタンプの間隔を計算
-        if len(normalized_timestamps) >= 2:
-            # 実データから間隔を計算
-            delta = normalized_timestamps[1] - normalized_timestamps[0]
-        else:
-            # データが1点しかない場合はエラーを発生させる
-            raise HTTPException(
-                status_code=400,
-                detail="予測には少なくとも2つのデータポイントが必要です",
-            )
-
-        # 予測期間の計算
-        time_difference = request.forecast_until - latest_timestamp
-
-        # 時間差をdelta単位のポイント数に変換
-        if delta.total_seconds() <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail="タイムスタンプの間隔が正しくありません（間隔がゼロまたは負の値）",
-            )
-
-        prediction_points = int(time_difference.total_seconds() / delta.total_seconds())
-
-        # 予測ポイント数が0以下の場合はエラー
-        if prediction_points <= 0:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"予測時点が最新のデータポイント以前です。"
-                    f"予測時点: {request.forecast_until}, "
-                    f"最新のデータポイント: {latest_timestamp}"
-                ),
-            )
-
-        logger.info(
-            f"予測ポイント数: {prediction_points}, 予測時点: {request.forecast_until}"
-        )
-
-        # 予測モデルの初期化
-        predictor = TimeSeriesPredictor(
-            model_name=request.model_name, model_params=request.model_params
-        )
-
-        # ゼロショット予測の実行
-        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
-            timestamp=normalized_timestamps,
-            values=normalized_values,
-            horizon=prediction_points,
-        )
-
-        # レスポンスを作成
-        response = PredictionResponse(
-            forecast_timestamp=forecast_timestamps,
-            forecast_values=forecast_values,
-            model_name=request.model_name,
-            confidence_intervals=metadata.get("confidence_intervals"),
-            metrics=metadata.get("metrics"),
-        )
-
-        return response
-    except HTTPException:
-        # HTTPExceptionはそのまま再発生させる
-        raise
-    except Exception as e:
-        logger.error(f"ゼロショット予測処理に失敗しました: {e}")
-
-        # データポイント不足の場合は400エラーとして処理
-        error_message = str(e)
-        if (
-            "データポイントが不十分" in error_message
-            or "少なくとも2つのデータポイントが必要です" in error_message
-            or "At least some time series in train_data must have >= 5 observations"
-            in error_message
-        ):
-            raise HTTPException(status_code=400, detail=error_message)
-
-        raise HTTPException(
-            status_code=500, detail=f"ゼロショット予測処理に失敗しました: {e}"
-        )
-
-
 def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
     """バックグラウンドで予測を実行する関数"""
     try:
         # タスクステータスを実行中に更新
-        prediction_tasks[task_id].status = PredictionStatus.RUNNING
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
-        prediction_tasks[task_id].message = "予測処理を開始しました"
+        task_manager.update_task(
+            task_id, status=PredictionStatus.RUNNING, message="予測処理を開始しました"
+        )
 
         logger.info(f"タスク {task_id} の予測処理を開始します")
+
+        # キャンセルチェック
+        task = task_manager.get_task(task_id)
+        if task and task.status == PredictionStatus.CANCELLED:
+            logger.info(f"タスク {task_id} はキャンセルされました")
+            return
 
         # 時系列データの正規化
         normalized_timestamps, normalized_values = normalize_time_series_data(
             request.timestamp, request.values, interpolation_method="auto"
         )
+
+        # キャンセルチェック
+        task = task_manager.get_task(task_id)
+        if task and task.status == PredictionStatus.CANCELLED:
+            logger.info(f"タスク {task_id} はキャンセルされました")
+            return
 
         # 最後のタイムスタンプを取得
         latest_timestamp = max(normalized_timestamps)
@@ -519,9 +487,15 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         logger.info(f"タスク {task_id}: 予測ポイント数: {prediction_points}")
 
         # 進捗更新: 前処理完了
-        prediction_tasks[task_id].progress = 0.2
-        prediction_tasks[task_id].message = "データ前処理が完了しました"
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        task_manager.update_task(
+            task_id, progress=0.2, message="データ前処理が完了しました"
+        )
+
+        # キャンセルチェック
+        task = task_manager.get_task(task_id)
+        if task and task.status == PredictionStatus.CANCELLED:
+            logger.info(f"タスク {task_id} はキャンセルされました")
+            return
 
         # 予測モデルの初期化
         predictor = TimeSeriesPredictor(
@@ -529,9 +503,15 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         )
 
         # 進捗更新: モデル初期化完了
-        prediction_tasks[task_id].progress = 0.3
-        prediction_tasks[task_id].message = "モデル初期化が完了しました"
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        task_manager.update_task(
+            task_id, progress=0.3, message="モデル初期化が完了しました"
+        )
+
+        # キャンセルチェック
+        task = task_manager.get_task(task_id)
+        if task and task.status == PredictionStatus.CANCELLED:
+            logger.info(f"タスク {task_id} はキャンセルされました")
+            return
 
         # ゼロショット予測の実行
         forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
@@ -540,10 +520,16 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
             horizon=prediction_points,
         )
 
+        # キャンセルチェック
+        task = task_manager.get_task(task_id)
+        if task and task.status == PredictionStatus.CANCELLED:
+            logger.info(f"タスク {task_id} はキャンセルされました")
+            return
+
         # 進捗更新: 予測完了
-        prediction_tasks[task_id].progress = 0.9
-        prediction_tasks[task_id].message = "予測計算が完了しました"
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        task_manager.update_task(
+            task_id, progress=0.9, message="予測計算が完了しました"
+        )
 
         # レスポンスを作成
         result = PredictionResponse(
@@ -555,11 +541,13 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         )
 
         # タスク完了
-        prediction_tasks[task_id].status = PredictionStatus.COMPLETED
-        prediction_tasks[task_id].progress = 1.0
-        prediction_tasks[task_id].result = result
-        prediction_tasks[task_id].message = "予測処理が正常に完了しました"
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        task_manager.update_task(
+            task_id,
+            status=PredictionStatus.COMPLETED,
+            progress=1.0,
+            result=result,
+            message="予測処理が正常に完了しました",
+        )
 
         logger.info(f"タスク {task_id} の予測処理が正常に完了しました")
 
@@ -568,17 +556,17 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
         error_msg = f"予測処理中にエラーが発生しました: {str(e)}"
         logger.error(f"タスク {task_id}: {error_msg}")
 
-        prediction_tasks[task_id].status = PredictionStatus.FAILED
-        prediction_tasks[task_id].error = error_msg
-        prediction_tasks[task_id].message = "予測処理に失敗しました"
-        prediction_tasks[task_id].updated_at = datetime.datetime.utcnow()
+        task_manager.update_task(
+            task_id,
+            status=PredictionStatus.FAILED,
+            error=error_msg,
+            message="予測処理に失敗しました",
+        )
 
 
 # 非同期ゼロショット予測開始エンドポイント
 @router.post("/predict_zero_shot_async", response_model=AsyncPredictionResponse)
-async def predict_zero_shot_async(
-    request: AsyncPredictionRequest, background_tasks: BackgroundTasks
-):
+async def predict_zero_shot_async(request: AsyncPredictionRequest):
     """
     非同期でゼロショット予測を開始する
 
@@ -590,8 +578,8 @@ async def predict_zero_shot_async(
         task_id = str(uuid.uuid4())
 
         # タスクを初期化
-        now = datetime.datetime.utcnow()
-        prediction_tasks[task_id] = PredictionResult(
+        now = datetime.datetime.now(datetime.timezone.utc)
+        task = PredictionResult(
             task_id=task_id,
             status=PredictionStatus.PENDING,
             progress=0.0,
@@ -600,8 +588,11 @@ async def predict_zero_shot_async(
             updated_at=now,
         )
 
-        # バックグラウンドタスクとして予測処理を開始
-        background_tasks.add_task(run_prediction_task, task_id, request)
+        # Futureオブジェクトを作成してタスクを送信
+        future = executor.submit(run_prediction_task, task_id, request)
+
+        # タスクマネージャーにタスクとFutureを追加
+        task_manager.add_task(task_id, task, future)
 
         logger.info(f"非同期予測タスクを開始しました: {task_id}")
         return AsyncPredictionResponse(
@@ -625,11 +616,12 @@ async def get_prediction_status(task_id: str):
 
     task_idに基づいて予測の進捗状況、結果、またはエラー情報を返します。
     """
-    if task_id not in prediction_tasks:
+    task = task_manager.get_task(task_id)
+    if task is None:
         raise HTTPException(
             status_code=404, detail=f"タスクが見つかりません: {task_id}"
         )
-    return prediction_tasks[task_id]
+    return task
 
 
 # 予測タスクの一覧取得エンドポイント
@@ -638,7 +630,51 @@ async def get_prediction_tasks():
     """
     すべての予測タスクの一覧を取得する
     """
-    return list(prediction_tasks.values())
+    # 完了したタスクのクリーンアップを実行
+    task_manager.cleanup_completed_tasks()
+    return task_manager.get_all_tasks()
+
+
+# 予測タスクのキャンセルエンドポイント
+@router.delete("/prediction_cancel/{task_id}")
+async def cancel_prediction_task(task_id: str):
+    """
+    実行中の予測タスクをキャンセルする
+
+    task_idで指定されたタスクの実行をキャンセルします。
+    既に実行中のタスクはすぐには停止されませんが、次のチェックポイントでキャンセルされます。
+    """
+    task = task_manager.get_task(task_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404, detail=f"タスクが見つかりません: {task_id}"
+        )
+
+    if task.status in [
+        PredictionStatus.COMPLETED,
+        PredictionStatus.FAILED,
+        PredictionStatus.CANCELLED,
+    ]:
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": f"タスクは既に{task.status.value}状態です",
+                "task_id": task_id,
+            },
+        )
+
+    cancelled = task_manager.cancel_task(task_id)
+
+    if cancelled:
+        message = "タスクが正常にキャンセルされました"
+    else:
+        message = "タスクのキャンセルが要求されました（実行中のタスクは次のチェックポイントで停止されます）"
+
+    logger.info(f"タスク {task_id} のキャンセルが要求されました")
+
+    return {"task_id": task_id, "message": message, "cancelled": cancelled}
 
 
 def normalize_time_series_data(

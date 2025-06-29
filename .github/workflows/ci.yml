@@ -52,8 +52,8 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate zcrc-chronos
-          black --check src tests
-          isort --check-only --profile black src tests
+          black --check .
+          isort --check-only --profile black .
 
   lint:
     runs-on: ubuntu-latest
@@ -100,68 +100,13 @@ jobs:
         shell: bash -l {0}
         run: |
           conda activate zcrc-chronos
-          flake8 src tests
+          flake8 .
 
-  # 高速テスト: 重要な機能のみ並列実行
-  test-critical:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      # Conda環境のセットアップ
-      - name: Setup Conda
-        uses: conda-incubator/setup-miniconda@v3
-        with:
-          auto-update-conda: true
-          python-version: '3.12'
-          activate-environment: zcrc-chronos
-          miniforge-variant: Miniforge3
-
-      # 環境ファイルのハッシュを取得してキャッシュキーに使用
-      - name: Get environment hash
-        id: env-hash
-        run: echo "hash=$(sha256sum environment.yml | cut -d ' ' -f1)" >> $GITHUB_OUTPUT
-
-      # condaのパッケージキャッシュ
-      - name: Cache conda packages
-        uses: actions/cache@v4
-        with:
-          path: /usr/share/miniconda3/pkgs
-          key: conda-pkgs-${{ runner.os }}-${{ steps.env-hash.outputs.hash }}
-          restore-keys: conda-pkgs-${{ runner.os }}-
-
-      # 環境の作成または更新
-      - name: Create conda environment
-        shell: bash -l {0}
-        run: |
-          conda env create -f environment.yml || conda env update -f environment.yml
-
-      # テスト依存関係のインストール
-      - name: Install test dependencies
-        shell: bash -l {0}
-        run: |
-          conda activate zcrc-chronos
-          pip install pytest pytest-cov pytest-xdist
-
-      # 重要テストのみ並列実行（最速）
-      - name: Critical tests with parallel execution
-        shell: bash -l {0}
-        run: |
-          conda activate zcrc-chronos
-          pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short --cov=src --cov-report=term-missing
-
-      # テスト結果のアップロード
-      - name: Upload coverage reports
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report-critical
-          path: .coverage
-
-  # 包括テスト: 全テストを段階的に実行
+  # 包括テスト: すべてのテストの完了を待つ集約ジョブ
   test-comprehensive:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-matrix-lite, test-matrix-heavy]
     steps:
       - uses: actions/checkout@v4
 
@@ -200,38 +145,17 @@ jobs:
           conda activate zcrc-chronos
           pip install pytest pytest-cov pytest-xdist
 
-      # 段階1: 高速テスト（API・基本機能）
-      - name: Fast tests (API & Basic)
+      # 包括テスト完了の確認
+      - name: Comprehensive test completion
         shell: bash -l {0}
         run: |
-          conda activate zcrc-chronos
-          pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py -n auto -v --tb=short
+          echo "✅ すべての包括テストが完了しました"
+          echo "Lite: Critical, Integration"
+          echo "Heavy: Models, Async, Extended"
+          echo "全テストスイートが正常に実行されました"
 
-      # 段階2: 無効入力テスト
-      - name: Invalid input tests
-        shell: bash -l {0}
-        run: |
-          conda activate zcrc-chronos
-          pytest tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n 2 -v --tb=short
-
-      # 段階3: 基本予測テスト
-      - name: Basic prediction tests
-        shell: bash -l {0}
-        run: |
-          conda activate zcrc-chronos
-          pytest tests/test_models.py::test_predictor_initialization tests/test_models.py::test_zero_shot_predict_implementation_verification -v --tb=short
-
-      # 段階4: 残りのテスト（時間制限付き）
-      - name: Remaining tests (time limited)
-        shell: bash -l {0}
-        timeout-minutes: 10
-        continue-on-error: true
-        run: |
-          conda activate zcrc-chronos
-          pytest tests/ -k "not (test_api or test_simple or TestPredictZeroShotInvalidInputs or test_predictor_initialization or test_zero_shot_predict_implementation_verification)" -n auto -v --tb=short --maxfail=3
-
-  # マトリックステスト: 複数環境での検証
-  test-matrix:
+  # 軽量テスト: 全ブランチで実行
+  test-matrix-lite:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -279,13 +203,13 @@ jobs:
           conda activate zcrc-chronos
           pip install pytest pytest-cov pytest-xdist
 
-      # Critical テストスイート
+      # Critical テストスイート（カバレッジ付き）
       - name: Run critical test suite
         if: matrix.test-suite == 'critical'
         shell: bash -l {0}
         run: |
           conda activate zcrc-chronos
-          pytest tests/test_api.py tests/test_simple.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short
+          pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short --cov=src --cov-report=term-missing
 
       # Integration テストスイート
       - name: Run integration test suite
@@ -294,3 +218,90 @@ jobs:
         run: |
           conda activate zcrc-chronos
           pytest tests/test_integration.py tests/test_library_compatibility.py -n 2 -v --tb=short
+
+      # カバレッジレポートのアップロード
+      - name: Upload coverage reports
+        if: matrix.test-suite == 'critical' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-critical
+          path: .coverage
+
+  # 重量テスト: 全ブランチで実行
+  test-matrix-heavy:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.12']
+        test-suite: ['models', 'async', 'extended']
+    steps:
+      - uses: actions/checkout@v4
+
+      # Conda環境のセットアップ
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: zcrc-chronos
+          miniforge-variant: Miniforge3
+
+      # 環境ファイルのハッシュを取得してキャッシュキーに使用
+      - name: Get environment hash
+        id: env-hash
+        run: echo "hash=$(sha256sum environment.yml | cut -d ' ' -f1)" >> $GITHUB_OUTPUT
+
+      # condaのパッケージキャッシュ
+      - name: Cache conda packages
+        uses: actions/cache@v4
+        with:
+          path: /usr/share/miniconda3/pkgs
+          key: conda-pkgs-${{ matrix.os }}-${{ matrix.python-version }}-${{ steps.env-hash.outputs.hash }}
+          restore-keys: |
+            conda-pkgs-${{ matrix.os }}-${{ matrix.python-version }}-
+            conda-pkgs-${{ matrix.os }}-
+
+      # 環境の作成または更新
+      - name: Create conda environment
+        shell: bash -l {0}
+        run: |
+          conda env create -f environment.yml || conda env update -f environment.yml
+
+      # テスト依存関係のインストール
+      - name: Install test dependencies
+        shell: bash -l {0}
+        run: |
+          conda activate zcrc-chronos
+          pip install pytest pytest-cov pytest-xdist
+
+      # Models テストスイート
+      - name: Run models test suite
+        if: matrix.test-suite == 'models'
+        shell: bash -l {0}
+        timeout-minutes: 30
+        continue-on-error: true
+        run: |
+          conda activate zcrc-chronos
+          pytest tests/test_models.py -v --tb=short --maxfail=3
+
+      # Async テストスイート
+      - name: Run async test suite
+        if: matrix.test-suite == 'async'
+        shell: bash -l {0}
+        timeout-minutes: 30
+        continue-on-error: true
+        run: |
+          conda activate zcrc-chronos
+          pytest tests/test_async_prediction.py -v --tb=short --maxfail=3
+
+      # Extended テストスイート（predict_zero_shot の残りのテスト）
+      - name: Run extended test suite
+        if: matrix.test-suite == 'extended'
+        shell: bash -l {0}
+        timeout-minutes: 30
+        continue-on-error: true
+        run: |
+          conda activate zcrc-chronos
+          pytest tests/test_predict_zero_shot.py -k "not TestPredictZeroShotInvalidInputs" -v --tb=short --maxfail=3

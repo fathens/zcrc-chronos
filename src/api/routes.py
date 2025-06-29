@@ -734,16 +734,12 @@ def normalize_time_series_data(
 
     # 時間間隔が十分に規則的（CV < 0.1）な場合は正規化をスキップ
     if cv < 0.1:
-        logger.info(
-            f"時間間隔が規則的（CV={cv:.3f}）なので正規化をスキップします"
-        )
+        logger.info(f"時間間隔が規則的（CV={cv:.3f}）なので正規化をスキップします")
         return timestamps, values
 
     # 時間間隔が不規則な場合は最小限の正規化を実行
     # ただし、価格変動を保持するために元のデータポイント数を維持
-    logger.info(
-        f"時間間隔が不規則（CV={cv:.3f}）なので最小限の正規化を実行します"
-    )
+    logger.info(f"時間間隔が不規則（CV={cv:.3f}）なので最小限の正規化を実行します")
 
     # 開始時刻と終了時刻の間を元のデータポイント数で等分
     total_duration = (end_time - start_time).total_seconds()
@@ -781,9 +777,7 @@ def normalize_time_series_data(
         original_range = max(values) - min(values)
         normalized_range = max(normalized_values) - min(normalized_values)
         retention_rate = (
-            (normalized_range / original_range * 100)
-            if original_range > 0
-            else 100
+            (normalized_range / original_range * 100) if original_range > 0 else 100
         )
 
         logger.info(

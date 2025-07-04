@@ -257,24 +257,25 @@ class TimeSeriesPredictor:
                 logger.warning(f"頻度設定に失敗、デフォルトを使用: {e}")
                 # 頻度設定に失敗した場合はそのまま続行
 
-            # AutoGluon-TimeSeries の設定
-            preset = model_params.get("preset", "medium_quality")
+            # AutoGluon-TimeSeries の設定（推奨設定に変更）
+            preset = model_params.get("preset", "high_quality")  # 予測精度を重視
 
             # データサイズに応じた設定の動的調整
             if data_length < 50:
                 # 非常に小さなデータセットの場合
-                preset = "medium_quality"
-                time_limit = 30  # 時間制限を短く
+                preset = "high_quality"  # 予測精度を重視
+                time_limit = 3600  # 1時間に延長（高品質予測のため）
                 logger.warning(
                     f"データサイズが小さいため設定を調整します: data_length={data_length}"
                 )
             elif data_length < 100:
                 # 小さなデータセットの場合
-                preset = "medium_quality"
-                time_limit = model_params.get("time_limit", 1800)  # 30分
+                preset = "high_quality"  # 予測精度を重視
+                time_limit = model_params.get("time_limit", 3600)  # 1時間に設定
             else:
                 # 十分なデータがある場合
-                time_limit = model_params.get("time_limit", 1800)  # 30分
+                # 1時間に設定（大きなデータセット用）
+                time_limit = model_params.get("time_limit", 3600)
 
             # プロセス間の競合を避けるために一意の一時ディレクトリを作成
             temp_dir = tempfile.gettempdir()
@@ -329,6 +330,7 @@ class TimeSeriesPredictor:
                     "num_val_windows": num_val_windows,
                     "val_step_size": val_step_size,
                     "skip_model_selection": False,
+                    # Naiveモデルのみ除外（価格予測に有害なモデルのみ）
                     "excluded_model_types": ["Naive"],
                 }
 
@@ -352,18 +354,17 @@ class TimeSeriesPredictor:
                 if horizon <= 6:
                     # 短期予測用：軽量で高速なモデルを選択
                     retry_hyperparameters = {
-                        "ETS": {},  # 短期予測に適している
-                        "SeasonalNaive": {},  # Naiveより高度だが軽量
-                        "RecursiveTabular": {},  # パターン学習可能
+                        "DirectTabular": {},  # 表形式データに適している
+                        "Theta": {},  # より適切なモデル
+                        "SimpleFeedForward": {},  # より適切な代替モデル
                     }
                     retry_time_limit = min(time_limit, 20)  # 短時間で完了
                 else:
                     # 中長期予測用：より高度なモデルを選択
                     retry_hyperparameters = {
-                        "SeasonalNaive": {},
-                        "ETS": {},
+                        "DirectTabular": {},  # 表形式データに最適
                         "Theta": {},
-                        "RecursiveTabular": {},
+                        "SimpleFeedForward": {},  # RecursiveTabularの代替
                         "Chronos": {},
                     }
                     retry_time_limit = time_limit
@@ -371,7 +372,8 @@ class TimeSeriesPredictor:
                 # フォールバック時も同様の修正を適用
                 retry_fit_kwargs = {
                     "train_data": time_series_data,
-                    "presets": "medium_quality",
+                    # good_quality は存在しないため high_quality に修正
+                    "presets": "high_quality",
                     "time_limit": retry_time_limit,
                     "num_val_windows": 0,
                     "val_step_size": 1,
@@ -382,9 +384,41 @@ class TimeSeriesPredictor:
                 predictor.fit(**retry_fit_kwargs)
                 logger.info("再試行での AutoGluon fit が完了しました")
 
-            # 予測を実行
-            forecast_result = predictor.predict(time_series_data)
-            logger.info(f"予測が完了しました: {type(forecast_result)}")
+            # 予測を実行（タイムアウト機能付き）
+            import threading
+
+            # 予測結果とエラーを格納する変数
+            forecast_result = None
+            prediction_error = None
+
+            def predict_with_timeout():
+                """タイムアウト付きで予測を実行する内部関数"""
+                nonlocal forecast_result, prediction_error
+                try:
+                    forecast_result = predictor.predict(time_series_data)
+                    logger.info(f"予測が完了しました: {type(forecast_result)}")
+                except Exception as e:
+                    prediction_error = e
+                    logger.error(f"予測実行中にエラーが発生しました: {e}")
+
+            # 予測をタイムアウト付きで実行（最大60秒）
+            prediction_thread = threading.Thread(target=predict_with_timeout)
+            prediction_thread.daemon = True
+            prediction_thread.start()
+            # 1時間でタイムアウト（高品質予測のため）
+            prediction_thread.join(timeout=3600.0)
+
+            if prediction_thread.is_alive():
+                logger.error("予測処理がタイムアウトしました（1時間）")
+                raise ValueError(
+                    "予測処理がタイムアウトしました。高品質予測には時間がかかりますが、1時間を超えました。"
+                )
+
+            if prediction_error:
+                raise prediction_error
+
+            if forecast_result is None:
+                raise ValueError("予測結果が取得できませんでした")
 
             # 予測結果から値を取得（実際のAPIに合わせて修正）
             try:

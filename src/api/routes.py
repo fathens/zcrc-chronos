@@ -687,26 +687,18 @@ def normalize_time_series_data(
 
     本関数は価格データの直線的予測問題を解決するために最適化されています。
     主要な改善点：
-    1. 外れ値検出基準の緩和（1.5×IQR → 3.0×IQR）
-    2. 価格データに特化した補間方法選択
-    3. データポイント倍増の無効化
-    4. 変動保持を最優先とする設計
+    1. 価格変動パターンの完全保持を最優先
+    2. 元のデータポイントを基準とした最小限の補間
+    3. スパイクや急激な変動の保持
+    4. データポイント数を増やさない設計
 
-    最初と最後のタイムスタンプ間の時間を、元のデータポイント数を保持しつつ
-    均等に分割し、価格変動パターンを保持する補間方法で新しい値を計算します。
+    価格データでは急激な変動（スパイク）も重要な情報なので、
+    可能な限り元のタイムスタンプ間隔を保持し、必要最小限の正規化のみを行います。
 
     Args:
         timestamps: 元のタイムスタンプのリスト
         values: 元の値のリスト
-        interpolation_method: 補間方法。以下の値が使用可能:
-            - "auto": データの特性に基づいて自動的に最適な方法を選択（デフォルト）
-            - "linear": 線形補間 - 2点間を直線で結ぶ。安定していて予測可能。
-            - "time": 時間インデックスを考慮した補間 - 不規則な時間間隔のデータに適している。
-            - "cubic": 3次スプライン補間 - より滑らかな曲線だが、オーバーシュートの可能性がある。
-            - "nearest": 最近傍補間 - 離散的な値を維持したい場合に有用。
-            - "quadratic": 2次スプライン補間 - 線形と3次の中間的な滑らかさ。
-            - "spline": スプライン補間 - より高度な滑らかさが必要な場合。
-            - "polynomial": 多項式補間 - 少数のデータ点に対して有効だが、不安定になりやすい。
+        interpolation_method: 補間方法（価格データでは使用しません）
 
     Returns:
         正規化されたタイムスタンプと値のタプル
@@ -714,126 +706,99 @@ def normalize_time_series_data(
     if not timestamps or not values:
         return timestamps, values
 
-    # 有効な補間方法のリスト
-    valid_methods = [
-        "auto",
-        "linear",
-        "time",
-        "cubic",
-        "nearest",
-        "quadratic",
-        "spline",
-        "polynomial",
-        "zero",
-        "slinear",
-        "akima",
-        "pchip",
-    ]
-
-    # 補間方法の検証
-    if interpolation_method not in valid_methods:
-        logger.warning(
-            f"無効な補間方法: {interpolation_method}. 'auto'に切り替えます。"
-        )
-        interpolation_method = "auto"
-
-    # 自動補間方法選択
-    if interpolation_method == "auto":
-        interpolation_method = _determine_best_interpolation_method(timestamps, values)
-        logger.info(f"自動選択された補間方法: {interpolation_method}")
-
-    # pandasのDataFrameを作成
-    df = pd.DataFrame({"timestamp": timestamps, "value": values})
-
-    # タイムスタンプをインデックスに設定
-    df = df.set_index("timestamp")
-
-    # 開始時刻と終了時刻を取得
+    # タイムスタンプの範囲とデータの個数をログに出力
     start_time = min(timestamps)
     end_time = max(timestamps)
-
-    # 全体の時間範囲を計算（秒単位）
-    total_duration = (end_time - start_time).total_seconds()
-
-    # データポイントの数に基づいて均等な間隔を計算
-    # 少なくとも元のデータと同じポイント数を維持
     num_points = len(timestamps)
 
-    # タイムスタンプの範囲とデータの個数をログに出力
     logger.info(
         f"タイムスタンプの範囲: {start_time.isoformat()} から {end_time.isoformat()}, "
         f"データ数: {num_points}"
     )
 
-    # 間隔を計算（秒単位）- 少なくとも1秒以上の間隔を確保
-    interval_seconds = (
-        max(1, total_duration / (num_points - 1)) if num_points > 1 else 1
+    # 価格データの変動保持を最優先する設計
+    # 時間間隔の規則性をチェック
+    if num_points <= 1:
+        return timestamps, values
+
+    time_diffs = [
+        (timestamps[i + 1] - timestamps[i]).total_seconds()
+        for i in range(len(timestamps) - 1)
+    ]
+
+    # 時間間隔の変動係数を計算
+    time_diff_array = np.array(time_diffs, dtype=np.float64)
+    mean_interval = np.mean(time_diff_array)
+    std_interval = np.std(time_diff_array)
+    cv = std_interval / mean_interval if mean_interval > 0 else 0
+
+    # 時間間隔が十分に規則的（CV < 0.1）な場合は正規化をスキップ
+    if cv < 0.1:
+        logger.info(
+            f"時間間隔が規則的（CV={cv:.3f}）なので正規化をスキップします"
+        )
+        return timestamps, values
+
+    # 時間間隔が不規則な場合は最小限の正規化を実行
+    # ただし、価格変動を保持するために元のデータポイント数を維持
+    logger.info(
+        f"時間間隔が不規則（CV={cv:.3f}）なので最小限の正規化を実行します"
     )
 
-    # 均等な間隔の新しい時間インデックスを作成
+    # 開始時刻と終了時刻の間を元のデータポイント数で等分
+    total_duration = (end_time - start_time).total_seconds()
+
+    if total_duration <= 0:
+        # 時間範囲が0の場合は元のデータをそのまま返す
+        return timestamps, values
+
+    # 均等な間隔を計算
+    interval_seconds = total_duration / max(1, num_points - 1)
+
+    # 新しいタイムスタンプを生成（元のデータポイント数と同じ）
     new_timestamps = []
-    current_time = start_time
+    for i in range(num_points):
+        new_time = start_time + datetime.timedelta(seconds=interval_seconds * i)
+        new_timestamps.append(new_time)
 
-    while current_time <= end_time:
-        new_timestamps.append(current_time)
-        current_time += datetime.timedelta(seconds=interval_seconds)
+    # 最後のタイムスタンプを終了時刻に合わせる
+    if len(new_timestamps) > 0:
+        new_timestamps[-1] = end_time
 
-    # 新しいタイムスタンプ数が元のデータポイント数よりも少なくならないように調整
-    if len(new_timestamps) < num_points:
-        # 時間範囲が0または非常に小さい場合の対処
-        if total_duration <= 0:
-            # 同一時刻または時間範囲が0の場合、元のタイムスタンプをそのまま使用
-            new_timestamps = timestamps.copy()
-        else:
-            # 間隔を調整して、元のデータポイント数を維持（2倍にしない）
-            # 価格データでは元のデータポイント数を保持することが重要
-            adjusted_interval = total_duration / max(1, num_points - 1)
-            new_timestamps = []
-            current_time = start_time
-
-            # 無限ループ防止とデータポイント数制限
-            max_points = num_points * 3  # 最大でも3倍まで
-            point_count = 0
-
-            while current_time <= end_time and point_count < max_points:
-                new_timestamps.append(current_time)
-                current_time += datetime.timedelta(seconds=adjusted_interval)
-                point_count += 1
-                # 安全装置：間隔が非常に小さい場合の停止
-                if adjusted_interval < 0.001:  # 1ミリ秒未満
-                    break
-
-    # 補間方法に応じた追加パラメータの設定
-    interpolation_kwargs = {}
-    if interpolation_method in ["spline", "polynomial"]:
-        # スプラインと多項式には追加のパラメータが必要
-        interpolation_kwargs["order"] = 3  # デフォルトの次数
-
-    # 補間方法に応じたデータの前処理
-    # 一部の方法では、データの前処理が必要になる場合がある
-    if interpolation_method == "time" and df.index.inferred_type != "datetime64":
-        # timeメソッドはdatetimeインデックスが必要
-        logger.warning(
-            "'time'補間方法はdatetimeインデックスが必要です。'linear'に切り替えます。"
-        )
-        interpolation_method = "linear"
+    # pandasを使用して最小限の補間を実行
+    df = pd.DataFrame({"timestamp": timestamps, "value": values})
+    df = df.set_index("timestamp")
 
     try:
-        # 元のデータフレームを新しいタイムスタンプで再インデックス化し、指定された方法で補間
-        resampled_df = df.reindex(new_timestamps).interpolate(
-            method=interpolation_method, **interpolation_kwargs
-        )
+        # 元のデータポイントが最も重要なので、nearest interpolationを使用
+        # これにより急激な変動（スパイク）を保持
+        resampled_df = df.reindex(new_timestamps, method="nearest")
 
         # 結果を返す
-        return new_timestamps, resampled_df["value"].tolist()
-    except Exception as e:
-        # 補間に失敗した場合はエラーをログに記録し、線形補間にフォールバック
-        logger.error(
-            f"補間方法 '{interpolation_method}' でエラーが発生しました: {e}. "
-            f"線形補間を使用します。"
+        normalized_values = resampled_df["value"].tolist()
+
+        # 変動保持の確認
+        original_range = max(values) - min(values)
+        normalized_range = max(normalized_values) - min(normalized_values)
+        retention_rate = (
+            (normalized_range / original_range * 100)
+            if original_range > 0
+            else 100
         )
-        resampled_df = df.reindex(new_timestamps).interpolate(method="linear")
-        return new_timestamps, resampled_df["value"].tolist()
+
+        logger.info(
+            f"正規化完了: 変動保持率={retention_rate:.1f}% "
+            f"(元: {original_range:.2f} → 正規化後: {normalized_range:.2f})"
+        )
+
+        return new_timestamps, normalized_values
+
+    except Exception as e:
+        # エラーが発生した場合は元のデータをそのまま返す
+        logger.error(
+            f"正規化処理でエラーが発生しました: {e}. 元のデータをそのまま使用します。"
+        )
+        return timestamps, values
 
 
 def _determine_best_interpolation_method(

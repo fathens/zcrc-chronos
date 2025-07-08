@@ -326,6 +326,11 @@ class TimeSeriesPredictor:
                 else self.config["default_model"]["chronos"]
             )
 
+            # 単一モデル設定の検出
+            use_single_model = model_params.get("use_single_model", False)
+            target_model = model_params.get("target_model", None)
+            predefined_hyperparameters = model_params.get("hyperparameters", {})
+
             # データフレームの作成
             df = pd.DataFrame(
                 {
@@ -406,6 +411,11 @@ class TimeSeriesPredictor:
                 # 1時間に設定（大きなデータセット用）
                 time_limit = model_params.get("time_limit", 3600)
 
+            # 単一モデル使用の場合は設定を無効化
+            if use_single_model:
+                preset = None
+                logger.info(f"単一モデル設定を使用: {target_model}")
+
             # 一時ディレクトリ管理を使用してAutoGluon予測を実行
             with temp_directory_manager("ag_ts_model") as temp_model_dir:
                 logger.info(
@@ -453,13 +463,29 @@ class TimeSeriesPredictor:
                     # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
                     fit_kwargs = {
                         "train_data": time_series_data,
-                        "presets": preset,
                         "time_limit": time_limit,
                         "num_val_windows": num_val_windows,
                         "val_step_size": val_step_size,
                         "skip_model_selection": False,
                         "excluded_model_types": ["Naive"],
                     }
+
+                    # 単一モデル設定の適用
+                    if use_single_model and target_model and predefined_hyperparameters:
+                        # 単一モデルの場合はhyperparametersを使用し、presetsを無効化
+                        fit_kwargs["hyperparameters"] = predefined_hyperparameters
+                        fit_kwargs["enable_ensemble"] = False  # アンサンブルを無効化
+                        fit_kwargs["skip_model_selection"] = (
+                            True  # モデル選択をスキップ
+                        )
+                        logger.info(
+                            f"単一モデル設定を適用: {target_model}, "
+                            f"hyperparameters={predefined_hyperparameters}"
+                        )
+                    else:
+                        # 通常の複数モデル設定
+                        fit_kwargs["presets"] = preset
+                        logger.info(f"複数モデル設定を適用: preset={preset}")
 
                     # num_val_windows=0の場合はtuning_dataを明示的に指定
                     if num_val_windows == 0:
@@ -477,36 +503,49 @@ class TimeSeriesPredictor:
                         path=temp_model_dir + "_retry",
                         verbosity=1,  # ログレベルを下げる
                     )
-                    # 再試行時は予測期間に応じて設定を調整
-                    if horizon <= 6:
-                        # 短期予測用：軽量で高速なモデルを選択
-                        retry_hyperparameters = {
-                            "ETS": {},  # 短期予測に適している
-                            "SeasonalNaive": {},  # Naiveより高度だが軽量
-                            "RecursiveTabular": {},  # パターン学習可能
-                        }
-                        retry_time_limit = min(time_limit, 20)  # 短時間で完了
-                    else:
-                        # 中長期予測用：より高度なモデルを選択
-                        retry_hyperparameters = {
-                            "SeasonalNaive": {},
-                            "ETS": {},
-                            "Theta": {},
-                            "RecursiveTabular": {},
-                            "Chronos": {},
-                        }
+                    # 再試行時も単一モデル設定を確認
+                    if use_single_model and target_model and predefined_hyperparameters:
+                        # 単一モデルの場合は同じ設定で再試行
+                        retry_hyperparameters = predefined_hyperparameters
                         retry_time_limit = time_limit
+                        logger.info(f"単一モデル設定で再試行: {target_model}")
+                    else:
+                        # 複数モデル時は予測期間に応じて設定を調整
+                        if horizon <= 6:
+                            # 短期予測用：軽量で高速なモデルを選択
+                            retry_hyperparameters = {
+                                "ETS": {},  # 短期予測に適している
+                                "SeasonalNaive": {},  # Naiveより高度だが軽量
+                                "RecursiveTabular": {},  # パターン学習可能
+                            }
+                            retry_time_limit = min(time_limit, 20)  # 短時間で完了
+                        else:
+                            # 中長期予測用：より高度なモデルを選択
+                            retry_hyperparameters = {
+                                "SeasonalNaive": {},
+                                "ETS": {},
+                                "Theta": {},
+                                "RecursiveTabular": {},
+                                "Chronos": {},
+                            }
+                            retry_time_limit = time_limit
 
                     # フォールバック時も同様の修正を適用
                     retry_fit_kwargs = {
                         "train_data": time_series_data,
-                        "presets": "medium_quality",
                         "time_limit": retry_time_limit,
                         "num_val_windows": 0,
                         "val_step_size": 1,
                         "hyperparameters": retry_hyperparameters,
                         "tuning_data": time_series_data,  # num_val_windows=0エラーを回避
                     }
+
+                    # 単一モデル設定の場合はアンサンブルを無効化
+                    if use_single_model:
+                        retry_fit_kwargs["enable_ensemble"] = False
+                        retry_fit_kwargs["skip_model_selection"] = True
+                    else:
+                        retry_fit_kwargs["presets"] = "medium_quality"
 
                     predictor.fit(**retry_fit_kwargs)
                     logger.info("再試行での AutoGluon fit が完了しました")
@@ -659,6 +698,24 @@ class TimeSeriesPredictor:
                     logger.warning(f"信頼区間の取得に失敗しました: {e}")
                     confidence_intervals = {"lower_95": [], "upper_95": []}
 
+                # 実際に使用されたモデルの情報を取得
+                trained_models = []
+                try:
+                    if hasattr(predictor, "model_names"):
+                        trained_models = predictor.model_names()
+                    elif hasattr(predictor, "get_model_names"):
+                        trained_models = predictor.get_model_names()
+                    elif hasattr(predictor, "_trainer") and hasattr(
+                        predictor._trainer, "model_names"
+                    ):
+                        trained_models = list(predictor._trainer.model_names())
+                    else:
+                        trained_models = ["unknown"]
+                    logger.info(f"実際に訓練されたモデル: {trained_models}")
+                except Exception as e:
+                    logger.warning(f"訓練されたモデル名の取得に失敗: {e}")
+                    trained_models = ["unknown"]
+
                 # モデルのメタデータを設定
                 model_metadata = {
                     # テスト互換性のためにmodel_typeはchronos_boltのままにする
@@ -669,6 +726,9 @@ class TimeSeriesPredictor:
                     "training_samples": len(values),  # テスト互換性のため追加
                     "preset": preset,  # テスト互換性のため追加
                     "adjusted_horizon": horizon,  # 調整後の予測期間を記録
+                    "use_single_model": use_single_model,  # 単一モデル設定フラグ
+                    "target_model": target_model,  # 指定されたターゲットモデル
+                    "trained_models": trained_models,  # 実際に訓練されたモデル一覧
                 }
 
                 # 必要に応じて予測値とタイムスタンプをhorizon長に切り詰める

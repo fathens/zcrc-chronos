@@ -320,10 +320,28 @@ class TimeSeriesPredictor:
             ]
 
             # モデルパラメータの設定
+            logger.info(f"使用するmodel_name: {self.model_name}")
+            logger.info(f"self.model_params: {self.model_params}")
+
+            # model_nameに基づいて適切な設定を選択
+            if self.model_name in self.config:
+                # 指定されたmodel_nameの設定を使用
+                model_config = self.config[self.model_name]["chronos"]
+                logger.info(f"選択されたモデル設定: {self.model_name}")
+            else:
+                # フォールバック: default_modelを使用
+                model_config = self.config["default_model"]["chronos"]
+                logger.info(
+                    f"フォールバック: default_modelを使用 "
+                    f"(要求されたmodel_name '{self.model_name}' が見つからない)"
+                )
+
+            logger.info(f"使用するchronos設定: {model_config}")
+
             model_params = (
-                {**self.config["default_model"]["chronos"], **self.model_params}
+                {**model_config, **self.model_params}
                 if self.model_params
-                else self.config["default_model"]["chronos"]
+                else model_config
             )
 
             # 単一モデル設定の検出
@@ -461,13 +479,20 @@ class TimeSeriesPredictor:
                     )
 
                     # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
+                    excluded_models = model_params.get(
+                        "excluded_model_types", ["Naive"]
+                    )
+                    logger.info(
+                        f"設定から読み込んだexcluded_model_types: {excluded_models}"
+                    )
+                    logger.info(f"model_params全体: {model_params}")
                     fit_kwargs = {
                         "train_data": time_series_data,
                         "time_limit": time_limit,
                         "num_val_windows": num_val_windows,
                         "val_step_size": val_step_size,
                         "skip_model_selection": False,
-                        "excluded_model_types": ["Naive"],
+                        "excluded_model_types": excluded_models,
                     }
 
                     # 単一モデル設定の適用
@@ -491,6 +516,7 @@ class TimeSeriesPredictor:
                     if num_val_windows == 0:
                         fit_kwargs["tuning_data"] = time_series_data
 
+                    # 直接fitを実行（タイムアウト処理を削除）
                     predictor.fit(**fit_kwargs)
                     logger.info("AutoGluon fit が完了しました")
                 except Exception as fit_error:

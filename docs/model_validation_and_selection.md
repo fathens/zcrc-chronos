@@ -10,37 +10,46 @@
 
 ### 基本コンセプト
 
-AutoGluon-TimeSeriesは**アンサンブル学習ライブラリ**として設計されており、単一のモデルではなく**複数のモデルを自動的に訓練し、最適なモデルを選択**します。
+zcrc-chronosでは**単一モデル専用設計**を採用しており、ユーザーが指定した特定のモデルのみを訓練・使用します。これにより予測精度と処理速度の最適化を実現しています。
+
+各モデルは特定の用途・特性に最適化されており、ユーザーが目的に応じて選択できます：
+- **高速処理**: SeasonalNaive（2分以内）
+- **統計的手法**: AutoETS（5分以内）
+- **機械学習**: NPTS、RecursiveTabular（10分以内）
+- **深層学習**: DeepAR、TemporalFusionTransformer（15-20分以内）
+
+### 利用可能な単一モデル一覧
 
 ```python
-# 自動的に訓練されるモデル群（例）
-models_to_train = [
-    'SeasonalNaive',        # 季節性を考慮したナイーブ予測
-    'RecursiveTabular',     # 機械学習ベースの回帰モデル
-    'DirectTabular',        # 直接的な機械学習予測
-    'NPTS',                 # Neural Prophet Time Series
-    'DynamicOptimizedTheta', # 動的最適化Thetaモデル
-    'AutoETS',              # 自動指数平滑法
-    'ChronosZeroShot[bolt_base]',    # Transformerベース（ゼロショット）
-    'ChronosFineTuned[bolt_small]',  # Transformerベース（ファインチューン）
-    'TemporalFusionTransformer',     # 高度なAttentionモデル
-    'DeepAR',               # Amazon開発の深層学習モデル
-    'PatchTST',             # パッチベースTransformer
-    'TiDE'                  # Time-series Dense Encoder
+# 現在サポートされている単一モデル
+available_models = [
+    'AutoETS',              # 自動指数平滑法（統計的手法・高速）
+    'NPTS',                 # Neural Prophet Time Series（高精度）
+    'SeasonalNaive',        # 季節性ベースライン（超高速）
+    'RecursiveTabular',     # 勾配ブースティング（高精度）
+    'ChronosZeroShot',      # Transformerベース（事前訓練済み）
+    'DynamicOptimizedTheta', # 動的最適化（バランス型）
+    'TemporalFusionTransformer', # 注意機構（最高精度）
+    'DeepAR'                # Amazon開発の深層学習
 ]
 ```
 
-### モデル除外設定
+### 単一モデル設定の利点
 
 ```python
-excluded_model_types = ["Naive"]  # 直線的予測を避けるため除外
+# 各モデルは特定用途に最適化
+single_model_config = {
+    "use_single_model": True,
+    "enable_ensemble": False,
+    "skip_model_selection": True
+}
 ```
 
-## 時系列交差検証（Time Series Cross-Validation）
+## 単一モデル検証プロセス
 
-### Multi-Window Backtesting手法
+### 指定モデル専用訓練
 
-AutoGluonは**時系列に特化した交差検証手法**を使用して、各モデルの性能を評価します。
+zcrc-chronosでは、ユーザーが指定したモデルのみを訓練し、**モデル選択プロセスをスキップ**することで高速化を実現します。
 
 #### 検証プロセスの詳細
 

@@ -135,7 +135,26 @@ default_model:
     verbosity: 2
     presets: "medium_quality"
     time_limit: 900
-    excluded_model_types: ["Naive", "Chronos"]
+    excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
+
+# サーバーデフォルトモデル設定（CLIで使用）
+server_default:
+  name: "server_default"
+  version: "1.0.0"
+  description: "サーバーデフォルトの時系列予測モデル"
+
+  # chronos-bolt設定
+  chronos:
+    model_type: "autogluon"
+    forecast_horizon: 24
+    frequency: "H"
+    seasonality_mode: "multiplicative"
+    bolt_size: "base"
+    eval_metric: "mean_absolute_error"
+    verbosity: 2
+    presets: "medium_quality"
+    time_limit: 900
+    excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
 
     # Prophetモデル固有のパラメータ
     prophet_params:

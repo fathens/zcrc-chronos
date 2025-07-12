@@ -129,9 +129,15 @@ predictor.fit(
     "timestamp": ["2023-01-01T00:00:00", ...],
     "values": [10.5, 11.2, ...],
     "forecast_until": "2023-01-04T02:00:00",
-    "model_name": "autoets_only"
+    "model_name": "autoets"
 }
 ```
+
+実際の実装では、以下のモデル名が使用されます：
+- `autoets` （config設定の`autoets_only`に相当）
+- `npts` （config設定の`npts_only`に相当）
+- `seasonal_naive` （config設定の`seasonal_naive_only`に相当）
+- `recursive_tabular` （config設定の`recursive_tabular_only`に相当）
 
 ### 設定の確認
 予測結果のメタデータで単一モデル設定が正しく適用されているかを確認できます：
@@ -153,10 +159,14 @@ python test_single_models.py
 
 ## 期待される結果
 
-- `autoets_only`を指定した場合：AutoETSModelのみが訓練される
-- `npts_only`を指定した場合：NPTSModelのみが訓練される
-- `seasonal_naive_only`を指定した場合：SeasonalNaiveModelのみが訓練される
-- `recursive_tabular_only`を指定した場合：RecursiveTabularModelのみが訓練される
+- `autoets`を指定した場合：AutoETSのみが訓練される
+- `npts`を指定した場合：NPTSのみが訓練される
+- `seasonal_naive`を指定した場合：SeasonalNaiveのみが訓練される
+- `recursive_tabular`を指定した場合：RecursiveTabularのみが訓練される
+- `chronos_zero_shot`を指定した場合：ChronosZeroShotのみが訓練される
+- `dynamic_theta`を指定した場合：DynamicOptimizedThetaのみが訓練される
+- `temporal_fusion_transformer`を指定した場合：TemporalFusionTransformerのみが訓練される
+- `deepar`を指定した場合：DeepARのみが訓練される
 
 これにより、ユーザーが特定のモデルを指定した場合、そのモデルのみが使用され、他のモデルは一切訓練されません。
 

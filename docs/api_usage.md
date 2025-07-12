@@ -134,7 +134,7 @@ curl -X GET "http://localhost:8000/api/v1/prediction_tasks"
 | `timestamp` | `List[datetime]` | ✓ | 時系列データのタイムスタンプ |
 | `values` | `List[float]` | ✓ | 時系列データの値 |
 | `forecast_until` | `datetime` | ✓ | 予測終了時点 |
-| `model_name` | `string` | - | 使用するモデル名（デフォルト: "chronos_default"） |
+| `model_name` | `string` | - | 使用するモデル名（デフォルト: "chronos_default"）。"chronos_default"はデフォルト設定を使用し、実際のモデルは内部で選択されます。 |
 | `model_params` | `Dict[str, Any]` | - | モデル固有のパラメータ |
 
 ## データ準備のベストプラクティス

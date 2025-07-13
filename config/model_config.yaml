@@ -118,6 +118,21 @@ available_models:
       expected_accuracy: "中程度（ETS統計モデル）"
       recommended_for: ["短期予測", "統計的手法", "標準ETS"]
 
+  - name: "chronos_zero_shot"
+    version: "1.0.0"
+    description: "ChronosZeroShotモデルのみ（事前訓練済みTransformer・真のZero Shot）- 訓練不要の即座予測"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 900
+      use_single_model: true
+      target_model: "ChronosZeroShotModel"
+      hyperparameters:
+        ChronosZeroShotModel:
+          model_path: "amazon/chronos-t5-base"
+      use_case: "訓練不要の即座予測・Zero Shot"
+      expected_accuracy: "高程度（事前訓練済みTransformer）"
+      recommended_for: ["即座予測", "訓練データ不足", "Zero Shot予測"]
+
 # デフォルトモデル設定（後方互換性）
 default_model:
   name: "chronos_default"

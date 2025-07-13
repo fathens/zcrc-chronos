@@ -200,6 +200,38 @@ class TimeSeriesPredictor:
             logger.error(f"モデル設定の読み込みに失敗しました: {e}")
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
 
+    def _find_model_config(self, model_name: str) -> Dict[str, Any]:
+        """
+        model_nameに基づいて適切な設定を検索
+
+        Args:
+            model_name: 検索するモデル名
+
+        Returns:
+            モデルのchronos設定
+        """
+        # available_models配列から検索
+        if "available_models" in self.config:
+            for model in self.config["available_models"]:
+                if model.get("name") == model_name:
+                    logger.info(f"選択されたモデル設定: {model_name}")
+                    return model["chronos"]
+
+        # default_modelとの完全一致チェック
+        if (
+            "default_model" in self.config
+            and self.config["default_model"].get("name") == model_name
+        ):
+            logger.info(f"選択されたモデル設定: {model_name} (default_model)")
+            return self.config["default_model"]["chronos"]
+
+        # フォールバック: default_modelを使用
+        logger.info(
+            f"フォールバック: default_modelを使用 "
+            f"(要求されたmodel_name '{model_name}' が見つからない)"
+        )
+        return self.config["default_model"]["chronos"]
+
     def zero_shot_predict(
         self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
     ) -> Tuple[List[datetime.datetime], List[float], Dict[str, Any]]:
@@ -324,17 +356,7 @@ class TimeSeriesPredictor:
             logger.info(f"self.model_params: {self.model_params}")
 
             # model_nameに基づいて適切な設定を選択
-            if self.model_name in self.config:
-                # 指定されたmodel_nameの設定を使用
-                model_config = self.config[self.model_name]["chronos"]
-                logger.info(f"選択されたモデル設定: {self.model_name}")
-            else:
-                # フォールバック: default_modelを使用
-                model_config = self.config["default_model"]["chronos"]
-                logger.info(
-                    f"フォールバック: default_modelを使用 "
-                    f"(要求されたmodel_name '{self.model_name}' が見つからない)"
-                )
+            model_config = self._find_model_config(self.model_name)
 
             logger.info(f"使用するchronos設定: {model_config}")
 

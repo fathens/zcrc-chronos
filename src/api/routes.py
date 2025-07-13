@@ -44,6 +44,18 @@ def load_config():
         )
 
 
+# モデル設定の読み込み
+def load_model_config():
+    try:
+        with open(MODEL_CONFIG_PATH, "r") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        logger.error(f"モデル設定ファイルの読み込みに失敗しました: {e}")
+        raise HTTPException(
+            status_code=500, detail="モデル設定の読み込みに失敗しました"
+        )
+
+
 config = load_config()
 
 # APIルーターの作成
@@ -416,125 +428,32 @@ async def get_models():
     利用可能な予測モデルの一覧を取得
     """
     try:
-        # 単一モデル専念設定を直接返却
-        models = [
-            ModelInfo(
-                name="autoets",
-                version="1.0.0",
-                description="AutoETS（統計的手法・高速・5分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 300,
-                    "use_single_model": True,
-                    "target_model": "AutoETS",
-                    "hyperparameters": {"AutoETS": {}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="npts",
-                version="1.0.0",
-                description="NPTS（Neural Prophet・高精度・10分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 600,
-                    "use_single_model": True,
-                    "target_model": "NPTS",
-                    "hyperparameters": {"NPTS": {}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="seasonal_naive",
-                version="1.0.0",
-                description="SeasonalNaive" "（季節性ベースライン・超高速・2分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 120,
-                    "use_single_model": True,
-                    "target_model": "SeasonalNaive",
-                    "hyperparameters": {"SeasonalNaive": {}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="recursive_tabular",
-                version="1.0.0",
-                description="RecursiveTabular"
-                "（勾配ブースティング・高精度・10分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 600,
-                    "use_single_model": True,
-                    "target_model": "RecursiveTabular",
-                    "hyperparameters": {"RecursiveTabular": {}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="chronos_zero_shot",
-                version="1.0.0",
-                description="ChronosZeroShot" "（Transformer・事前訓練済み・15分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 900,
-                    "use_single_model": True,
-                    "target_model": "ChronosZeroShot",
-                    "hyperparameters": {"Chronos": {"model_path": "bolt_base"}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="dynamic_theta",
-                version="1.0.0",
-                description="DynamicOptimizedTheta" "（動的最適化・中精度・5分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 300,
-                    "use_single_model": True,
-                    "target_model": "DynamicOptimizedTheta",
-                    "hyperparameters": {"DynamicOptimizedTheta": {}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="temporal_fusion_transformer",
-                version="1.0.0",
-                description="TemporalFusionTransformer"
-                "（注意機構・最高精度・20分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 1200,
-                    "use_single_model": True,
-                    "target_model": "TemporalFusionTransformer",
-                    "hyperparameters": {
-                        "TemporalFusionTransformer": {"hidden_size": 32}
-                    },
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-            ModelInfo(
-                name="deepar",
-                version="1.0.0",
-                description="DeepAR（Amazon開発・深層学習・15分以内）",
-                parameters={
-                    "model_type": "autogluon",
-                    "time_limit": 900,
-                    "use_single_model": True,
-                    "target_model": "DeepAR",
-                    "hyperparameters": {"DeepAR": {"num_layers": 2, "hidden_size": 40}},
-                    "enable_ensemble": False,
-                    "skip_model_selection": True,
-                },
-            ),
-        ]
+        model_config = load_model_config()
+        models = []
+
+        # デフォルトモデルを追加
+        if "default_model" in model_config:
+            default_model = model_config["default_model"]
+            models.append(
+                ModelInfo(
+                    name=default_model["name"],
+                    version=default_model["version"],
+                    description=default_model["description"],
+                    parameters=default_model["chronos"],
+                )
+            )
+
+        # 利用可能なモデルを追加
+        if "available_models" in model_config:
+            for model in model_config["available_models"]:
+                models.append(
+                    ModelInfo(
+                        name=model["name"],
+                        version=model["version"],
+                        description=model["description"],
+                        parameters=model["chronos"],
+                    )
+                )
 
         return models
     except Exception as e:

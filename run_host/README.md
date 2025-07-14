@@ -54,6 +54,51 @@ export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0  # MPS メモリ管理
 export PYTORCH_ENABLE_MPS_FALLBACK=1          # MPS フォールバック有効
 ```
 
+## ログ管理
+
+### ログファイルの場所
+
+サーバーのログは以下の場所に出力されます：
+
+```bash
+run_host/logs/app.log              # 現在のログファイル
+run_host/logs/app.YYYY-MM-DD_*.log # ローテーション済みログファイル
+```
+
+### ログの確認方法
+
+```bash
+# 現在のログをリアルタイム監視
+tail -f run_host/logs/app.log
+
+# 最新の100行を表示
+tail -100 run_host/logs/app.log
+
+# ログファイル一覧を確認
+ls -la run_host/logs/
+
+# 特定のキーワードでログを検索
+grep "エラー\|ERROR" run_host/logs/app*.log
+
+# 予測処理のログのみを表示
+grep "予測" run_host/logs/app*.log
+```
+
+### ログローテーション
+
+- **ファイルサイズ**: 10MBごとに自動ローテーション
+- **保持数**: 最新10個のファイルを保持
+- **命名規則**: `app.YYYY-MM-DD_HH-mm-ss_xxxxxx.log`
+
+### ログレベル調整
+
+ログレベルは `config/app_config.yaml` で変更できます：
+
+```yaml
+logging:
+  level: "DEBUG"  # DEBUG, INFO, WARNING, ERROR
+```
+
 ## トラブルシューティング
 
 ### MPS利用不可の場合
@@ -70,6 +115,26 @@ python -c "import torch; print(torch.backends.mps.is_built())"
 # 環境リセット
 conda env remove -n zcrc-chronos
 conda env create -f environment.yml
+```
+
+### ログ関連のトラブルシューティング
+
+```bash
+# ログディレクトリが存在しない場合
+mkdir -p run_host/logs
+
+# ログファイルへの書き込み権限エラー
+chmod 755 run_host/logs/
+chmod 644 run_host/logs/app.log
+
+# ログファイルサイズが大きすぎる場合（手動ローテーション）
+mv run_host/logs/app.log run_host/logs/app.$(date +%Y%m%d_%H%M%S).log
+
+# すべてのログファイルを削除（注意: データが失われます）
+rm -f run_host/logs/app*.log
+
+# 特定の期間のログを検索
+grep "$(date +%Y-%m-%d)" run_host/logs/app*.log
 ```
 
 ## パフォーマンス比較

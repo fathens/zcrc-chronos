@@ -10,6 +10,7 @@ from types import ModuleType
 
 import pytest
 import yaml
+from loguru import logger
 
 # 実際のライブラリが必要かどうかを判断する環境変数
 NEED_REAL_LIBRARY = os.environ.get("NEED_REAL_LIBRARY", "true").lower() == "true"
@@ -43,6 +44,15 @@ if project_root not in sys.path:
 # テスト実行環境の設定
 def pytest_configure(config):
     """テスト実行前のグローバル設定"""
+    # Loguruのテスト用設定（ファイルハンドルエラーを防ぐ）
+    logger.remove()  # 既存のハンドラーを削除
+    logger.add(
+        sink=lambda msg: None,  # テスト時はログ出力を無効化
+        format="{time} | {level} | {message}",
+        level="ERROR",  # エラーレベル以上のみ
+        catch=False,  # エラーをキャッチしない
+    )
+
     # 常に実ライブラリを使用する場合、この設定をアクティブにする
     # os.environ['USE_REAL_LIBRARY'] = 'true'
 

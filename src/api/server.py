@@ -37,6 +37,46 @@ def load_config():
 # アプリケーション設定の読み込み
 config = load_config()
 
+
+# loguruの設定
+def configure_logging():
+    """
+    loguruのログ設定を行う
+    """
+    # プロジェクトルートのパスを取得
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    log_file_path = os.path.join(project_root, config["logging"]["file"])
+
+    # ディレクトリが存在しない場合は作成
+    log_dir = os.path.dirname(log_file_path)
+    os.makedirs(log_dir, exist_ok=True)
+
+    # 既存のハンドラーを削除
+    logger.remove()
+
+    # コンソール出力を追加
+    logger.add(
+        sink=lambda msg: print(msg, end=""),
+        format=config["logging"]["format"],
+        level=config["logging"]["level"],
+    )
+
+    # ファイル出力を追加
+    logger.add(
+        sink=log_file_path,
+        format=config["logging"]["format"],
+        level=config["logging"]["level"],
+        rotation=config["logging"]["rotation"],
+        retention=config["logging"]["retention"],
+        encoding="utf-8",
+    )
+
+    logger.info(f"ログ設定完了: {log_file_path}")
+
+
+# ログ設定を実行
+configure_logging()
+
 # FastAPIアプリケーションの初期化
 app = FastAPI(
     title=config["api"]["title"],

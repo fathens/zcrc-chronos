@@ -95,4 +95,17 @@ echo "================================"
 # ログ出力でGPU使用状況を確認
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-python scripts/run_server.py
+# サーバー起動（run_server.pyの機能を統合）
+python -c "
+import sys
+import os
+
+# プロジェクトルートをPythonパスに追加
+project_root = os.getcwd()
+sys.path.insert(0, project_root)
+
+print('zcrc-chronos APIサーバーを起動します...')
+
+from src.api.server import start_server
+start_server()
+"

@@ -13,12 +13,12 @@ Apple Silicon Mac (M1/M2/M4) のMetal Performance Shaders (MPS) を活用してC
 
 ### 1. Conda環境作成
 ```bash
-conda env create -f environment-host.yml
+conda env create -f environment.yml
 ```
 
 ### 2. 環境アクティベート
 ```bash
-conda activate zcrc-chronos-gpu
+conda activate zcrc-chronos
 ```
 
 ### 3. GPU対応確認
@@ -28,7 +28,7 @@ python -c "import torch; print(f'MPS available: {torch.backends.mps.is_available
 
 ### 4. サーバー起動
 ```bash
-python scripts/run_server.py
+./run_host/run.sh
 ```
 
 ## 特徴
@@ -36,7 +36,7 @@ python scripts/run_server.py
 - ✅ **Apple Silicon GPU (MPS) 対応**: M1/M2/M4チップのGPUを活用
 - ✅ **真のChronos Zero Shot**: 事前訓練済みTransformerモデル
 - ✅ **自動フォールバック**: GPU利用不可時はCPUで実行
-- ✅ **依存関係自動管理**: environment-host.ymlで一括管理
+- ✅ **依存関係自動管理**: environment.ymlで一括管理
 
 ## GPU対応モデル
 
@@ -68,8 +68,8 @@ python -c "import torch; print(torch.backends.mps.is_built())"
 ### 依存関係エラー
 ```bash
 # 環境リセット
-conda env remove -n zcrc-chronos-gpu
-conda env create -f environment-host.yml
+conda env remove -n zcrc-chronos
+conda env create -f environment.yml
 ```
 
 ## パフォーマンス比較

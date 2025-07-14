@@ -14,7 +14,6 @@ AutoGluon-TimeSeriesライブラリを使用した日本語対応の時系列予
 - **時系列予測器**: AutoGluon-TimeSeriesのラッパークラス
 - **データ正規化**: 複数の補間手法による自動時系列データ前処理
 - **設定システム**: アプリとモデル設定のYAMLベース管理
-- **コンテナ化デプロイ**: conda環境管理によるDocker環境
 
 ## 開発環境セットアップ
 
@@ -65,9 +64,10 @@ makers check
 
 ### アプリケーション実行
 ```bash
-# 開発モード（自動リロード付き）
-python scripts/run_server.py
-# または
+# GPU対応でのサーバー起動（推奨）
+./run_host/run.sh
+
+# または開発モード（自動リロード付き）
 uvicorn src.api.server:app --reload
 
 # 本番モード
@@ -254,15 +254,6 @@ git commit -m "your message"  # 再実行
 - **makers**: `cargo install cargo-make`でインストール（初回のみ）
 - **開発ツール**: `makers setup`で自動インストールされます
 
-### Dockerデプロイ
-```bash
-# ローカルデプロイ
-cd run_local
-./run.sh
-
-# サービス停止
-docker compose down
-```
 
 ## 主要コンポーネント
 
@@ -389,8 +380,3 @@ pytest tests/test_models.py tests/your_heavy_test.py -v --tb=short
 
 ### ログ機能
 app_config.yamlで定義されたファイルローテーションとリテンションポリシー付きloguru構造化ログを使用。
-
-### Docker環境
-- Python 3.12付きminiconda3ベース
-- ヘルスチェックと適切なログ設定を含む
-- データ、ログ、設定の永続化用ボリュームマウント

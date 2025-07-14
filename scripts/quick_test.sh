@@ -27,7 +27,6 @@ TASK_ID=$(curl -s -X POST "http://localhost:8000/api/v1/predict_zero_shot_async"
 echo "📋 Task ID: $TASK_ID"
 
 sleep 3
-echo "📊 Result:"
-docker logs zcrc-chronos --tail 10 | grep -E "(選択されたモデル設定.*$MODEL_NAME|Models trained|Best model)" | tail -2
+echo "📊 Result: Check server logs for model selection details"
 
 echo "✅ Done"

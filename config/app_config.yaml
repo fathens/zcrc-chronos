@@ -31,7 +31,6 @@ data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
   models_dir: "data/models"
-  default_model: "default_model"
 
 # セキュリティ設定
 security:

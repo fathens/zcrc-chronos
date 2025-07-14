@@ -120,16 +120,17 @@ available_models:
 
   - name: "chronos_zero_shot"
     version: "1.0.0"
-    description: "ChronosZeroShotモデルのみ（事前訓練済みTransformer・真のZero Shot）- 訓練不要の即座予測"
+    description: "Chronos事前訓練済みTransformer（真のZero Shot予測）"
     chronos:
       model_type: "autogluon"
-      time_limit: 900
+      time_limit: 300
       use_single_model: true
-      target_model: "ChronosZeroShotModel"
+      target_model: "Chronos"
       hyperparameters:
-        ChronosZeroShotModel:
-          model_path: "amazon/chronos-t5-base"
-      use_case: "訓練不要の即座予測・Zero Shot"
+        Chronos:
+          model_path: "amazon/chronos-t5-tiny"  # 軽量モデルから開始
+          device: "auto"  # auto: MPS -> CUDA -> CPU の順で選択
+      use_case: "訓練不要の即座予測・真のZero Shot"
       expected_accuracy: "高程度（事前訓練済みTransformer）"
       recommended_for: ["即座予測", "訓練データ不足", "Zero Shot予測"]
 

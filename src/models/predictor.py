@@ -209,6 +209,9 @@ class TimeSeriesPredictor:
 
         Returns:
             モデルのchronos設定
+
+        Raises:
+            ValueError: 指定されたモデルが見つからない場合
         """
         # available_models配列から検索
         if "available_models" in self.config:
@@ -225,12 +228,21 @@ class TimeSeriesPredictor:
             logger.info(f"選択されたモデル設定: {model_name} (default_model)")
             return self.config["default_model"]["chronos"]
 
-        # フォールバック: default_modelを使用
-        logger.info(
-            f"フォールバック: default_modelを使用 "
-            f"(要求されたmodel_name '{model_name}' が見つからない)"
+        # モデルが見つからない場合はエラーを発生
+        available_models = []
+        if "available_models" in self.config:
+            available_models = [
+                model.get("name") for model in self.config["available_models"]
+            ]
+        if "default_model" in self.config:
+            available_models.append(self.config["default_model"].get("name"))
+
+        error_msg = (
+            f"モデル '{model_name}' が見つかりません。"
+            f"利用可能なモデル: {available_models}"
         )
-        return self.config["default_model"]["chronos"]
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     def zero_shot_predict(
         self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
@@ -543,60 +555,10 @@ class TimeSeriesPredictor:
                     logger.info("AutoGluon fit が完了しました")
                 except Exception as fit_error:
                     logger.error(f"AutoGluon fit でエラーが発生しました: {fit_error}")
-                    # さらに寛容な設定で再試行
-                    logger.info("より寛容な設定で再試行します")
-                    predictor = AutoGluonTSPredictor(
-                        prediction_length=horizon,
-                        eval_metric="MAE",
-                        path=temp_model_dir + "_retry",
-                        verbosity=1,  # ログレベルを下げる
+                    # エラー時は即座に失敗として処理（フォールバック無し）
+                    raise Exception(
+                        f"モデル '{target_model}' の学習に失敗しました: {fit_error}"
                     )
-                    # 再試行時も単一モデル設定を確認
-                    if use_single_model and target_model and predefined_hyperparameters:
-                        # 単一モデルの場合は同じ設定で再試行
-                        retry_hyperparameters = predefined_hyperparameters
-                        retry_time_limit = time_limit
-                        logger.info(f"単一モデル設定で再試行: {target_model}")
-                    else:
-                        # 複数モデル時は予測期間に応じて設定を調整
-                        if horizon <= 6:
-                            # 短期予測用：軽量で高速なモデルを選択
-                            retry_hyperparameters = {
-                                "ETS": {},  # 短期予測に適している
-                                "SeasonalNaive": {},  # Naiveより高度だが軽量
-                                "RecursiveTabular": {},  # パターン学習可能
-                            }
-                            retry_time_limit = min(time_limit, 20)  # 短時間で完了
-                        else:
-                            # 中長期予測用：より高度なモデルを選択
-                            retry_hyperparameters = {
-                                "SeasonalNaive": {},
-                                "ETS": {},
-                                "Theta": {},
-                                "RecursiveTabular": {},
-                                "Chronos": {},
-                            }
-                            retry_time_limit = time_limit
-
-                    # フォールバック時も同様の修正を適用
-                    retry_fit_kwargs = {
-                        "train_data": time_series_data,
-                        "time_limit": retry_time_limit,
-                        "num_val_windows": 0,
-                        "val_step_size": 1,
-                        "hyperparameters": retry_hyperparameters,
-                        "tuning_data": time_series_data,  # num_val_windows=0エラーを回避
-                    }
-
-                    # 単一モデル設定の場合はアンサンブルを無効化
-                    if use_single_model:
-                        retry_fit_kwargs["enable_ensemble"] = False
-                        retry_fit_kwargs["skip_model_selection"] = True
-                    else:
-                        retry_fit_kwargs["presets"] = "medium_quality"
-
-                    predictor.fit(**retry_fit_kwargs)
-                    logger.info("再試行での AutoGluon fit が完了しました")
 
                 # 予測を実行
                 forecast_result = predictor.predict(time_series_data)

@@ -171,6 +171,37 @@ task_manager = TaskManager()
 executor = ThreadPoolExecutor(max_workers=4)
 
 
+def validate_model_name(model_name: str) -> bool:
+    """モデル名が有効かどうかを検証する"""
+    config = load_model_config()
+
+    # available_models配列から検索
+    if "available_models" in config:
+        for model in config["available_models"]:
+            if model.get("name") == model_name:
+                return True
+
+    # default_modelとの完全一致チェック
+    if "default_model" in config and config["default_model"].get("name") == model_name:
+        return True
+
+    return False
+
+
+def get_available_model_names() -> List[str]:
+    """利用可能なモデル名のリストを取得する"""
+    config = load_model_config()
+    available_models = []
+
+    if "available_models" in config:
+        available_models = [model.get("name") for model in config["available_models"]]
+
+    if "default_model" in config:
+        available_models.append(config["default_model"].get("name"))
+
+    return available_models
+
+
 # リクエスト/レスポンスモデル
 class TimeSeriesData(BaseModel):
     """時系列データモデル"""
@@ -601,6 +632,16 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest):
     予測の進捗や結果は別のエンドポイントでポーリングして取得できます。
     """
     try:
+        # モデル名の検証
+        if not validate_model_name(request.model_name):
+            available_models = get_available_model_names()
+            error_msg = (
+                f"モデル '{request.model_name}' が見つかりません。"
+                f"利用可能なモデル: {available_models}"
+            )
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+
         # 一意のタスクIDを生成
         task_id = str(uuid.uuid4())
 

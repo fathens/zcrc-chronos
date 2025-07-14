@@ -5,7 +5,8 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(dirname $0)"
+SCRIPT_DIR="$(pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 ENV_NAME="zcrc-chronos"
 
@@ -95,7 +96,8 @@ echo "================================"
 # ログ出力でGPU使用状況を確認
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
-# サーバー起動（run_server.pyの機能を統合）
+# サーバー起動
+# 標準出力をapp.logにリダイレクト（標準エラー出力は画面に表示）
 python -c "
 import sys
 import os
@@ -108,4 +110,4 @@ print('zcrc-chronos APIサーバーを起動します...')
 
 from src.api.server import start_server
 start_server()
-"
+" >> run_host/logs/app.log 2>&1

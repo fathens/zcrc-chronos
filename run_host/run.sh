@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-ENV_NAME="zcrc-chronos-gpu"
+ENV_NAME="zcrc-chronos"
 
 echo "🚀 zcrc-chronos ホスト環境 (GPU対応) を起動します..."
 echo "📁 プロジェクトルート: $PROJECT_ROOT"
@@ -18,10 +18,10 @@ echo ""
 echo "🔍 Conda環境を確認中..."
 if ! conda info --envs | grep -q "$ENV_NAME"; then
     echo "⚠️  環境 '$ENV_NAME' が見つかりません"
-    echo "📦 environment-host.yml から環境を作成中..."
+    echo "📦 environment.yml から環境を作成中..."
 
     cd "$PROJECT_ROOT"
-    conda env create -f environment-host.yml
+    conda env create -f environment.yml
 
     if [ $? -ne 0 ]; then
         echo "❌ 環境作成に失敗しました。手動でセットアップしてください:"

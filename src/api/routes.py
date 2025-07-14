@@ -505,6 +505,19 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
 
         logger.info(f"タスク {task_id} の予測処理を開始します")
 
+        # モデル名の検証
+        if not validate_model_name(request.model_name):
+            available_models = get_available_model_names()
+            error_msg = (
+                f"モデル '{request.model_name}' が見つかりません。"
+                f"利用可能なモデル: {available_models}"
+            )
+            logger.error(error_msg)
+            task_manager.update_task(
+                task_id, status=PredictionStatus.FAILED, message=error_msg
+            )
+            return
+
         # キャンセルチェック
         task = task_manager.get_task(task_id)
         if task and task.status == PredictionStatus.CANCELLED:
@@ -632,16 +645,6 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest):
     予測の進捗や結果は別のエンドポイントでポーリングして取得できます。
     """
     try:
-        # モデル名の検証
-        if not validate_model_name(request.model_name):
-            available_models = get_available_model_names()
-            error_msg = (
-                f"モデル '{request.model_name}' が見つかりません。"
-                f"利用可能なモデル: {available_models}"
-            )
-            logger.error(error_msg)
-            raise HTTPException(status_code=400, detail=error_msg)
-
         # 一意のタスクIDを生成
         task_id = str(uuid.uuid4())
 

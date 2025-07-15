@@ -16,6 +16,12 @@ import pandas as pd
 import yaml
 from loguru import logger
 
+# PyTorch/Transformersの互換性問題を回避するための環境変数設定
+os.environ["TRANSFORMERS_OFFLINE"] = "0"  # オフラインモード無効化
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 並列処理による競合回避
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # MPS実行時のフォールバック有効化
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # MPS メモリ使用量調整
+
 # AutoGluon-TimeSeriesライブラリをインポート
 try:
     from autogluon.timeseries import TimeSeriesDataFrame
@@ -532,6 +538,19 @@ class TimeSeriesPredictor:
                     # 単一モデル設定の適用
                     if use_single_model and target_model and predefined_hyperparameters:
                         # 単一モデルの場合はhyperparametersを使用し、presetsを無効化
+                        # Float32 精度を確実に適用
+                        if "torch_dtype" in predefined_hyperparameters.get(
+                            target_model, {}
+                        ):
+                            import torch
+
+                            if (
+                                predefined_hyperparameters[target_model]["torch_dtype"]
+                                == "float32"
+                            ):
+                                predefined_hyperparameters[target_model][
+                                    "torch_dtype"
+                                ] = torch.float32
                         fit_kwargs["hyperparameters"] = predefined_hyperparameters
                         fit_kwargs["enable_ensemble"] = False  # アンサンブルを無効化
                         fit_kwargs["skip_model_selection"] = (

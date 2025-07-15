@@ -128,8 +128,9 @@ available_models:
       target_model: "Chronos"
       hyperparameters:
         Chronos:
-          model_path: "amazon/chronos-t5-tiny"  # 軽量モデルから開始
-          device: "auto"  # auto: MPS -> CUDA -> CPU の順で選択
+          model_path: "autogluon/chronos-bolt-base"  # Chronos-Bolt Base: 205Mパラメータ、高精度と速度のバランス
+          device: "cpu"  # 安定性を優先してCPU使用
+          torch_dtype: "float32"  # MPS互換性のため
       use_case: "訓練不要の即座予測・真のZero Shot"
       expected_accuracy: "高程度（事前訓練済みTransformer）"
       recommended_for: ["即座予測", "訓練データ不足", "Zero Shot予測"]

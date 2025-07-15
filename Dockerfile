@@ -40,4 +40,4 @@ COPY . .
 EXPOSE 8000
 
 # アプリケーションを実行
-CMD ["conda", "run", "--no-capture-output", "-n", "zcrc-chronos", "python", "scripts/run_server.py"]
+CMD ["conda", "run", "--no-capture-output", "-n", "zcrc-chronos", "python", "-m", "src.api.server"]

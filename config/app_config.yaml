@@ -22,16 +22,16 @@ api:
 logging:
   level: "INFO"
   format: "{time} | {level} | {message}"
-  file: "logs/app.log"
-  rotation: "500 MB"
-  retention: "10 days"
+  # ファイル出力は使用しない（標準出力のみ）
+  file: null
+  rotation: null
+  retention: null
 
 # データ設定
 data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
   models_dir: "data/models"
-  default_model: "default_model"
 
 # セキュリティ設定
 security:

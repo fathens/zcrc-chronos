@@ -88,7 +88,10 @@ uvicorn src.api.server:app --reload
 - `GET /` - APIの基本情報
 - `GET /api/v1/health` - ヘルスチェック
 - `GET /api/v1/models` - 利用可能なモデル一覧
-- `POST /api/v1/predict` - 時系列予測の実行
+- `POST /api/v1/predict_zero_shot_async` - 非同期ゼロショット予測の開始
+- `GET /api/v1/prediction_status/{task_id}` - 予測タスクのステータス確認
+- `GET /api/v1/prediction_tasks` - 全予測タスクの一覧取得
+- `DELETE /api/v1/prediction_cancel/{task_id}` - 予測タスクのキャンセル
 
 詳細なAPIドキュメントは、サーバー起動後に以下のURLで確認できます：
 

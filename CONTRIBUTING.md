@@ -14,7 +14,6 @@ AutoGluon-TimeSeriesライブラリを使用した日本語対応の時系列予
 - **時系列予測器**: AutoGluon-TimeSeriesのラッパークラス
 - **データ正規化**: 複数の補間手法による自動時系列データ前処理
 - **設定システム**: アプリとモデル設定のYAMLベース管理
-- **コンテナ化デプロイ**: conda環境管理によるDocker環境
 
 ## 開発環境セットアップ
 
@@ -65,9 +64,10 @@ makers check
 
 ### アプリケーション実行
 ```bash
-# 開発モード（自動リロード付き）
-python scripts/run_server.py
-# または
+# GPU対応でのサーバー起動（推奨）
+./run_host/run.sh
+
+# または開発モード（自動リロード付き）
 uvicorn src.api.server:app --reload
 
 # 本番モード
@@ -152,6 +152,19 @@ pip install autogluon.timeseries>=1.3.0
 ### コード品質チェック
 
 **重要**: コミット前に必ず以下の全てのチェックを実行し、すべてエラーなしで通ることを確認してください。
+
+**⚠️ 絶対禁止**: pre-commitの検証をスキップしてはいけません。以下のコマンドは絶対に使用しないでください：
+- `git commit --no-verify` または `git commit -n`
+- `SKIP=hook-name git commit`
+- その他のpre-commitフックをバイパスする方法
+
+**理由**: pre-commitフックはコード品質、セキュリティ、一貫性を保証する重要な機能です。これをスキップすると：
+- コードスタイルの不整合
+- 潜在的なバグやセキュリティ問題
+- CI/CDパイプラインでの失敗
+- 他の開発者への悪影響
+
+**正しい方法**: エラーが発生した場合は、必ずエラーを修正してから再コミットしてください。
 
 #### 🚀 簡単な方法（推奨）
 
@@ -241,15 +254,6 @@ git commit -m "your message"  # 再実行
 - **makers**: `cargo install cargo-make`でインストール（初回のみ）
 - **開発ツール**: `makers setup`で自動インストールされます
 
-### Dockerデプロイ
-```bash
-# ローカルデプロイ
-cd run_local
-./run.sh
-
-# サービス停止
-docker compose down
-```
 
 ## 主要コンポーネント
 
@@ -376,8 +380,3 @@ pytest tests/test_models.py tests/your_heavy_test.py -v --tb=short
 
 ### ログ機能
 app_config.yamlで定義されたファイルローテーションとリテンションポリシー付きloguru構造化ログを使用。
-
-### Docker環境
-- Python 3.12付きminiconda3ベース
-- ヘルスチェックと適切なログ設定を含む
-- データ、ログ、設定の永続化用ボリュームマウント

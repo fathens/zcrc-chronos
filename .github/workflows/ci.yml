@@ -207,6 +207,8 @@ jobs:
       - name: Run critical test suite
         if: matrix.test-suite == 'critical'
         shell: bash -l {0}
+        env:
+          PYTEST_CURRENT_TEST: "true"
         run: |
           conda activate zcrc-chronos
           pytest tests/test_api.py tests/test_simple.py tests/test_simple_unittest.py tests/test_predict_zero_shot.py::TestPredictZeroShotInvalidInputs -n auto -v --tb=short --cov=src --cov-report=term-missing
@@ -215,6 +217,8 @@ jobs:
       - name: Run integration test suite
         if: matrix.test-suite == 'integration'
         shell: bash -l {0}
+        env:
+          PYTEST_CURRENT_TEST: "true"
         run: |
           conda activate zcrc-chronos
           pytest tests/test_integration.py tests/test_library_compatibility.py -n 2 -v --tb=short
@@ -282,6 +286,8 @@ jobs:
         shell: bash -l {0}
         timeout-minutes: 30
         continue-on-error: true
+        env:
+          PYTEST_CURRENT_TEST: "true"
         run: |
           conda activate zcrc-chronos
           pytest tests/test_models.py -v --tb=short --maxfail=3
@@ -292,6 +298,8 @@ jobs:
         shell: bash -l {0}
         timeout-minutes: 30
         continue-on-error: true
+        env:
+          PYTEST_CURRENT_TEST: "true"
         run: |
           conda activate zcrc-chronos
           pytest tests/test_async_prediction.py -v --tb=short --maxfail=3
@@ -302,6 +310,8 @@ jobs:
         shell: bash -l {0}
         timeout-minutes: 30
         continue-on-error: true
+        env:
+          PYTEST_CURRENT_TEST: "true"
         run: |
           conda activate zcrc-chronos
           pytest tests/test_predict_zero_shot.py -k "not TestPredictZeroShotInvalidInputs" -v --tb=short --maxfail=3

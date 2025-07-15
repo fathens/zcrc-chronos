@@ -10,8 +10,6 @@ services:
       - "8000:8000"
     volumes:
       - ../data:/app/data
-      - ../logs:/app/logs
-      - ../config:/app/config
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONDONTWRITEBYTECODE=1
@@ -24,11 +22,6 @@ services:
     restart: unless-stopped
     networks:
       - chronos-network
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "10"
 
 networks:
   chronos-network:

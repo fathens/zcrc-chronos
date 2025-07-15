@@ -37,6 +37,50 @@ def load_config():
 # アプリケーション設定の読み込み
 config = load_config()
 
+
+# loguruの設定
+def configure_logging():
+    """
+    loguruのログ設定を行う（標準出力のみ）
+    """
+    try:
+        # テスト環境かどうかを判定
+        is_test_env = os.getenv("PYTEST_CURRENT_TEST") is not None
+
+        if is_test_env:
+            # テスト環境では最小限のログ設定
+            logger.remove()
+            logger.add(
+                sink=lambda msg: None,  # テスト時はログを無効化
+                format="{time} | {level} | {message}",
+                level="ERROR",  # エラーレベル以上のみ
+                catch=False,  # エラーをキャッチしない
+            )
+            return
+
+        # 既存のハンドラーを削除
+        logger.remove()
+
+        # 標準出力のみに出力
+        logger.add(
+            sink=lambda msg: print(msg, end=""),
+            format=config["logging"]["format"],
+            level=config["logging"]["level"],
+            catch=False,  # エラーをキャッチしない
+        )
+
+        logger.info("ログ設定完了: 標準出力のみ")
+
+    except Exception:
+        # 設定が失敗した場合はデフォルトのロガーを使用
+        logger.remove()
+        logger.add(lambda msg: None, level="ERROR", catch=False)
+
+
+# ログ設定を実行（テスト時以外）
+if os.getenv("PYTEST_CURRENT_TEST") is None:
+    configure_logging()
+
 # FastAPIアプリケーションの初期化
 app = FastAPI(
     title=config["api"]["title"],

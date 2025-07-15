@@ -1,0 +1,55 @@
+# モデル設定 - 代替案（用途重視命名）
+
+# 利用可能なモデル一覧
+available_models:
+  - name: "realtime_trader"
+    version: "1.0.0"
+    description: "リアルタイム取引用・超高速モデル（5分以内）- 統計的手法中心"
+    chronos:
+      model_type: "autogluon"
+      presets: "light"
+      time_limit: 300
+      excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
+      primary_models: ["SeasonalNaive", "AutoETS", "RecursiveTabular", "DirectTabular"]
+      use_case: "短期価格予測・アルゴリズム取引"
+
+  - name: "risk_analysis"
+    version: "1.0.0"
+    description: "リスク分析用・バランス型モデル（15分以内）- ML手法中心"
+    chronos:
+      model_type: "autogluon"
+      presets: "medium_quality"
+      time_limit: 900
+      excluded_model_types: ["Naive", "Chronos"]
+      primary_models: ["NPTS", "DynamicOptimizedTheta", "AutoETS", "RecursiveTabular", "DirectTabular"]
+      use_case: "中期リスク評価・ポートフォリオ管理"
+
+  - name: "strategic_planning"
+    version: "1.0.0"
+    description: "戦略立案用・高精度モデル（30分以内）- 深層学習中心"
+    chronos:
+      model_type: "autogluon"
+      presets: "high_quality"
+      time_limit: 1800
+      excluded_model_types: ["Naive"]
+      primary_models: ["ChronosZeroShot", "TemporalFusionTransformer", "DeepAR", "PatchTST", "TiDE", "NPTS"]
+      use_case: "長期戦略・投資計画"
+
+# デフォルトモデル設定（後方互換性）
+default_model:
+  name: "chronos_default"
+  version: "1.0.0"
+  description: "デフォルトの時系列予測モデル"
+
+  # chronos-bolt設定
+  chronos:
+    model_type: "autogluon"
+    forecast_horizon: 24
+    frequency: "H"
+    seasonality_mode: "multiplicative"
+    bolt_size: "base"
+    eval_metric: "mean_absolute_error"
+    verbosity: 2
+    presets: "medium_quality"
+    time_limit: 900
+    excluded_model_types: ["Naive", "Chronos"]

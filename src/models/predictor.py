@@ -2,16 +2,25 @@
 時系列予測モデルのラッパーモジュール
 """
 
+import atexit
 import datetime
 import os
+import shutil
 import tempfile
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+from contextlib import contextmanager
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import yaml
 from loguru import logger
+
+# PyTorch/Transformersの互換性問題を回避するための環境変数設定
+os.environ["TRANSFORMERS_OFFLINE"] = "0"  # オフラインモード無効化
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 並列処理による競合回避
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # MPS実行時のフォールバック有効化
+os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # MPS メモリ使用量調整
 
 # AutoGluon-TimeSeriesライブラリをインポート
 try:
@@ -31,6 +40,132 @@ MODEL_CONFIG_PATH = os.path.join(
     "config",
     "model_config.yaml",
 )
+
+# 一時ディレクトリの追跡用グローバル変数
+_temp_directories = set()
+
+
+def _is_docker_environment() -> bool:
+    """
+    Docker環境で実行されているかどうかを判定
+
+    Returns:
+        bool: Docker環境の場合True
+    """
+    return (
+        os.path.exists("/.dockerenv")
+        or os.environ.get("CONTAINER_NAME") is not None
+        or os.environ.get("KUBERNETES_SERVICE_HOST") is not None
+    )
+
+
+def _get_temp_base_dir() -> str:
+    """
+    環境に応じた一時ディレクトリのベースパスを取得
+
+    Returns:
+        str: 一時ディレクトリのベースパス
+    """
+    # 環境変数での指定を優先
+    custom_temp = os.environ.get("ZCRC_TEMP_DIR")
+    if custom_temp and os.path.exists(custom_temp) and os.access(custom_temp, os.W_OK):
+        return custom_temp
+
+    # Docker環境の場合は/tmpを明示的に使用
+    if _is_docker_environment():
+        docker_tmp = "/tmp"
+        if os.path.exists(docker_tmp) and os.access(docker_tmp, os.W_OK):
+            return docker_tmp
+
+    # 標準の一時ディレクトリを使用
+    return tempfile.gettempdir()
+
+
+@contextmanager
+def temp_directory_manager(prefix: str = "ag_ts_model") -> Generator[str, None, None]:
+    """
+    UUID を使用したユニークな一時ディレクトリの作成と自動クリーンアップ
+    Docker環境に対応した一時ディレクトリ管理
+
+    Args:
+        prefix: ディレクトリ名のプレフィックス
+
+    Yields:
+        str: 作成された一時ディレクトリのパス
+
+    Environment Variables:
+        ZCRC_TEMP_DIR: カスタム一時ディレクトリパス（オプション）
+    """
+    temp_base = _get_temp_base_dir()
+    unique_dir = os.path.join(temp_base, f"{prefix}_{uuid.uuid4().hex}")
+    actual_dir = None  # 実際に使用されたディレクトリを追跡
+
+    try:
+        os.makedirs(unique_dir, exist_ok=True)
+        _temp_directories.add(unique_dir)
+        actual_dir = unique_dir
+
+        # Docker環境ではログレベルを調整
+        if _is_docker_environment():
+            logger.debug(f"一時ディレクトリを作成しました: {unique_dir}")
+        else:
+            logger.info(f"一時ディレクトリを作成しました: {unique_dir}")
+
+        yield unique_dir
+    except PermissionError as e:
+        logger.error(
+            f"一時ディレクトリの作成に失敗しました（権限エラー）: {unique_dir}, エラー: {e}"
+        )
+        # フォールバック: ユーザーホームディレクトリ配下に作成を試行
+        fallback_dir = os.path.join(
+            os.path.expanduser("~"), ".zcrc_temp", f"{prefix}_{uuid.uuid4().hex}"
+        )
+        try:
+            os.makedirs(fallback_dir, exist_ok=True)
+            _temp_directories.add(fallback_dir)
+            actual_dir = fallback_dir
+            logger.warning(f"フォールバックディレクトリを使用します: {fallback_dir}")
+            yield fallback_dir
+        except Exception as fallback_error:
+            logger.error(
+                f"フォールバックディレクトリの作成も失敗しました: {fallback_error}"
+            )
+            raise
+    except Exception as e:
+        logger.error(f"一時ディレクトリの作成中に予期しないエラーが発生しました: {e}")
+        raise
+    finally:
+        # クリーンアップ処理 - 実際に使用されたディレクトリを削除
+        if actual_dir:
+            cleanup_temp_directory(actual_dir)
+
+
+def cleanup_temp_directory(temp_dir: str) -> None:
+    """
+    一時ディレクトリの安全な削除
+
+    Args:
+        temp_dir: 削除する一時ディレクトリのパス
+    """
+    try:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info(f"一時ディレクトリを削除しました: {temp_dir}")
+        _temp_directories.discard(temp_dir)
+    except Exception as e:
+        logger.warning(f"一時ディレクトリの削除に失敗しました: {temp_dir}, エラー: {e}")
+
+
+def cleanup_all_temp_directories() -> None:
+    """
+    すべての追跡中の一時ディレクトリをクリーンアップ
+    """
+    for temp_dir in list(_temp_directories):
+        cleanup_temp_directory(temp_dir)
+
+
+# プロセス終了時の自動クリーンアップを登録
+atexit.register(cleanup_all_temp_directories)
 
 
 class TimeSeriesPredictor:
@@ -70,6 +205,50 @@ class TimeSeriesPredictor:
         except Exception as e:
             logger.error(f"モデル設定の読み込みに失敗しました: {e}")
             raise ValueError(f"モデル設定の読み込みに失敗しました: {e}")
+
+    def _find_model_config(self, model_name: str) -> Dict[str, Any]:
+        """
+        model_nameに基づいて適切な設定を検索
+
+        Args:
+            model_name: 検索するモデル名
+
+        Returns:
+            モデルのchronos設定
+
+        Raises:
+            ValueError: 指定されたモデルが見つからない場合
+        """
+        # available_models配列から検索
+        if "available_models" in self.config:
+            for model in self.config["available_models"]:
+                if model.get("name") == model_name:
+                    logger.info(f"選択されたモデル設定: {model_name}")
+                    return model["chronos"]
+
+        # default_modelとの完全一致チェック
+        if (
+            "default_model" in self.config
+            and self.config["default_model"].get("name") == model_name
+        ):
+            logger.info(f"選択されたモデル設定: {model_name} (default_model)")
+            return self.config["default_model"]["chronos"]
+
+        # モデルが見つからない場合はエラーを発生
+        available_models = []
+        if "available_models" in self.config:
+            available_models = [
+                model.get("name") for model in self.config["available_models"]
+            ]
+        if "default_model" in self.config:
+            available_models.append(self.config["default_model"].get("name"))
+
+        error_msg = (
+            f"モデル '{model_name}' が見つかりません。"
+            f"利用可能なモデル: {available_models}"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
 
     def zero_shot_predict(
         self, timestamp: List[datetime.datetime], values: List[float], horizon: int = 24
@@ -191,11 +370,24 @@ class TimeSeriesPredictor:
             ]
 
             # モデルパラメータの設定
+            logger.info(f"使用するmodel_name: {self.model_name}")
+            logger.info(f"self.model_params: {self.model_params}")
+
+            # model_nameに基づいて適切な設定を選択
+            model_config = self._find_model_config(self.model_name)
+
+            logger.info(f"使用するchronos設定: {model_config}")
+
             model_params = (
-                {**self.config["default_model"]["chronos"], **self.model_params}
+                {**model_config, **self.model_params}
                 if self.model_params
-                else self.config["default_model"]["chronos"]
+                else model_config
             )
+
+            # 単一モデル設定の検出
+            use_single_model = model_params.get("use_single_model", False)
+            target_model = model_params.get("target_model", None)
+            predefined_hyperparameters = model_params.get("hyperparameters", {})
 
             # データフレームの作成
             df = pd.DataFrame(
@@ -257,300 +449,337 @@ class TimeSeriesPredictor:
                 logger.warning(f"頻度設定に失敗、デフォルトを使用: {e}")
                 # 頻度設定に失敗した場合はそのまま続行
 
-            # AutoGluon-TimeSeries の設定
-            preset = model_params.get("preset", "medium_quality")
+            # AutoGluon-TimeSeries の設定（推奨設定に変更）
+            preset = model_params.get("preset", "high_quality")  # 予測精度を重視
 
             # データサイズに応じた設定の動的調整
             if data_length < 50:
                 # 非常に小さなデータセットの場合
-                preset = "medium_quality"
-                time_limit = 30  # 時間制限を短く
+                preset = "high_quality"  # 予測精度を重視
+                time_limit = 3600  # 1時間に延長（高品質予測のため）
                 logger.warning(
                     f"データサイズが小さいため設定を調整します: data_length={data_length}"
                 )
             elif data_length < 100:
                 # 小さなデータセットの場合
-                preset = "medium_quality"
-                time_limit = model_params.get("time_limit", 1800)  # 30分
+                preset = "high_quality"  # 予測精度を重視
+                time_limit = model_params.get("time_limit", 3600)  # 1時間に設定
             else:
                 # 十分なデータがある場合
-                time_limit = model_params.get("time_limit", 1800)  # 30分
+                # 1時間に設定（大きなデータセット用）
+                time_limit = model_params.get("time_limit", 3600)
 
-            # プロセス間の競合を避けるために一意の一時ディレクトリを作成
-            temp_dir = tempfile.gettempdir()
-            temp_model_dir = os.path.join(temp_dir, f"ag_ts_model_{uuid.uuid4().hex}")
-            os.makedirs(temp_model_dir, exist_ok=True)
+            # 単一モデル使用の場合は設定を無効化
+            if use_single_model:
+                preset = None
+                logger.info(f"単一モデル設定を使用: {target_model}")
 
-            logger.info(
-                f"AutoGluon設定: preset={preset}, time_limit={time_limit}, "
-                f"temp_dir={temp_model_dir}"
-            )
-
-            # AutoGluon-TimeSeries を使用した予測
-            predictor = AutoGluonTSPredictor(
-                prediction_length=horizon,
-                eval_metric="MAE",  # 実ライブラリがサポートするメトリクス
-                path=temp_model_dir,
-                verbosity=model_params.get("verbosity", 2),
-            )
-
-            # フィット - より寛容な設定を使用
-            try:
-                # AutoGluonの厳格な要件を回避するための設定
-                # データサイズに関係なく動作するよう調整
-
-                # AutoGluonの厳格な内部チェックを回避
-                # より安全な設定: データサイズに大きな余裕を持たせる
-                safe_margin = max(10, horizon * 2)  # 予測期間の2倍または10の大きい方
-
-                if data_length >= horizon + safe_margin:
-                    # 十分にデータがある場合のみ検証を実行
-                    num_val_windows = 1
-                    val_step_size = 1
-                else:
-                    # 少しでも不安がある場合は検証を無効化
-                    num_val_windows = 0
-                    val_step_size = 1
-                    logger.warning(
-                        f"安全のため検証を無効化: data_length={data_length}, "
-                        f"horizon={horizon}, required_margin={safe_margin}"
-                    )
-
+            # 一時ディレクトリ管理を使用してAutoGluon予測を実行
+            with temp_directory_manager("ag_ts_model") as temp_model_dir:
                 logger.info(
-                    f"検証設定: num_val_windows={num_val_windows}, "
-                    f"val_step_size={val_step_size}"
+                    f"AutoGluon設定: preset={preset}, time_limit={time_limit}, "
+                    f"temp_dir={temp_model_dir}"
                 )
 
-                # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
-                fit_kwargs = {
-                    "train_data": time_series_data,
-                    "presets": preset,
-                    "time_limit": time_limit,
-                    "num_val_windows": num_val_windows,
-                    "val_step_size": val_step_size,
-                    "skip_model_selection": False,
-                    "excluded_model_types": ["Naive"],
-                }
-
-                # num_val_windows=0の場合はtuning_dataを明示的に指定
-                if num_val_windows == 0:
-                    fit_kwargs["tuning_data"] = time_series_data
-
-                predictor.fit(**fit_kwargs)
-                logger.info("AutoGluon fit が完了しました")
-            except Exception as fit_error:
-                logger.error(f"AutoGluon fit でエラーが発生しました: {fit_error}")
-                # さらに寛容な設定で再試行
-                logger.info("より寛容な設定で再試行します")
+                # AutoGluon-TimeSeries を使用した予測
                 predictor = AutoGluonTSPredictor(
                     prediction_length=horizon,
-                    eval_metric="MAE",
-                    path=temp_model_dir + "_retry",
-                    verbosity=1,  # ログレベルを下げる
+                    eval_metric="MAE",  # 実ライブラリがサポートするメトリクス
+                    path=temp_model_dir,
+                    verbosity=model_params.get("verbosity", 2),
                 )
-                # 再試行時は予測期間に応じて設定を調整
-                if horizon <= 6:
-                    # 短期予測用：軽量で高速なモデルを選択
-                    retry_hyperparameters = {
-                        "ETS": {},  # 短期予測に適している
-                        "SeasonalNaive": {},  # Naiveより高度だが軽量
-                        "RecursiveTabular": {},  # パターン学習可能
-                    }
-                    retry_time_limit = min(time_limit, 20)  # 短時間で完了
-                else:
-                    # 中長期予測用：より高度なモデルを選択
-                    retry_hyperparameters = {
-                        "SeasonalNaive": {},
-                        "ETS": {},
-                        "Theta": {},
-                        "RecursiveTabular": {},
-                        "Chronos": {},
-                    }
-                    retry_time_limit = time_limit
 
-                # フォールバック時も同様の修正を適用
-                retry_fit_kwargs = {
-                    "train_data": time_series_data,
-                    "presets": "medium_quality",
-                    "time_limit": retry_time_limit,
-                    "num_val_windows": 0,
-                    "val_step_size": 1,
-                    "hyperparameters": retry_hyperparameters,
-                    "tuning_data": time_series_data,  # num_val_windows=0エラーを回避
-                }
+                # フィット - より寛容な設定を使用
+                try:
+                    # AutoGluonの厳格な要件を回避するための設定
+                    # データサイズに関係なく動作するよう調整
 
-                predictor.fit(**retry_fit_kwargs)
-                logger.info("再試行での AutoGluon fit が完了しました")
+                    # AutoGluonの厳格な内部チェックを回避
+                    # より安全な設定: データサイズに大きな余裕を持たせる
+                    safe_margin = max(
+                        10, horizon * 2
+                    )  # 予測期間の2倍または10の大きい方
 
-            # 予測を実行
-            forecast_result = predictor.predict(time_series_data)
-            logger.info(f"予測が完了しました: {type(forecast_result)}")
-
-            # 予測結果から値を取得（実際のAPIに合わせて修正）
-            try:
-                # モックの場合と実際のライブラリの場合で処理を分ける
-                if hasattr(forecast_result, "item_ids"):
-                    # 実際のAutogluon.timeseriesの結果形式
-                    # 最初のitem_idを取得
-                    item_id = time_series_data.item_ids[0]
-
-                    # 平均値（mean）の予測列を取得
-                    if item_id in forecast_result.item_ids:
-                        # 平均値（point forecast）を取得
-                        forecast_values = forecast_result.loc[item_id, "mean"].tolist()
-                        # 数値型に変換（Numpy型などからPythonのfloatへ）
-                        forecast_values = [float(val) for val in forecast_values]
+                    if data_length >= horizon + safe_margin:
+                        # 十分にデータがある場合のみ検証を実行
+                        num_val_windows = 1
+                        val_step_size = 1
                     else:
-                        # item_idが見つからない場合は最初の系列の予測を使用
-                        first_id = forecast_result.item_ids[0]
-                        forecast_values = forecast_result.loc[first_id, "mean"].tolist()
-                        forecast_values = [float(val) for val in forecast_values]
+                        # 少しでも不安がある場合は検証を無効化
+                        num_val_windows = 0
+                        val_step_size = 1
+                        logger.warning(
+                            f"安全のため検証を無効化: data_length={data_length}, "
+                            f"horizon={horizon}, required_margin={safe_margin}"
+                        )
 
                     logger.info(
-                        f"予測値を正常に取得しました: {len(forecast_values)}ポイント"
+                        f"検証設定: num_val_windows={num_val_windows}, "
+                        f"val_step_size={val_step_size}"
                     )
-                elif isinstance(forecast_result, dict):
-                    # モックテスト用の辞書形式の場合
-                    item_id = time_series_data.item_ids[0]
-                    if item_id in forecast_result:
-                        # item_idがキーとして存在する場合
-                        forecast_values = forecast_result[item_id].values.tolist()
-                    else:
-                        # キーが異なる構造の場合
-                        first_key = list(forecast_result.keys())[0]
-                        forecast_values = forecast_result[first_key].values.tolist()
-                elif hasattr(forecast_result, "values"):
-                    # その他のデータフレーム形式の場合
-                    forecast_values = forecast_result.values.tolist()
-                else:
-                    # その他の形式の場合
-                    forecast_values = list(forecast_result)
-                    if len(forecast_values) == 0:
-                        # 予測値がない場合はゼロ埋め
-                        forecast_values = [0.0] * horizon
-            except Exception as access_error:
-                logger.warning(
-                    f"予測結果へのアクセス方法が想定と異なります: {access_error}"
-                )
-                # エラーが発生した場合は、ゼロ埋めデータを返す
-                forecast_values = [0.0] * horizon
 
-            # 信頼区間の取得を試みる
-            confidence_intervals = {}
-            try:
-                # モックの場合と実際のライブラリの場合で処理を分ける
-                if (
-                    hasattr(forecast_result, "item_ids")
-                    and hasattr(forecast_result, "columns")
-                    and hasattr(forecast_result.columns, "levels")
-                ):
-                    # AutoGluon.timeseriesの場合
-                    item_id = time_series_data.item_ids[0]
+                    # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
+                    excluded_models = model_params.get(
+                        "excluded_model_types", ["Naive"]
+                    )
+                    logger.info(
+                        f"設定から読み込んだexcluded_model_types: {excluded_models}"
+                    )
+                    logger.info(f"model_params全体: {model_params}")
+                    fit_kwargs = {
+                        "train_data": time_series_data,
+                        "time_limit": time_limit,
+                        "num_val_windows": num_val_windows,
+                        "val_step_size": val_step_size,
+                        "skip_model_selection": False,
+                        "excluded_model_types": excluded_models,
+                    }
 
-                    if item_id in forecast_result.item_ids:
-                        # 信頼区間（10%と90%分位数など）を使用
-                        lower_quantile = 0.1  # 10%分位数
-                        upper_quantile = 0.9  # 90%分位数
+                    # 単一モデル設定の適用
+                    if use_single_model and target_model and predefined_hyperparameters:
+                        # 単一モデルの場合はhyperparametersを使用し、presetsを無効化
+                        # Float32 精度を確実に適用
+                        if "torch_dtype" in predefined_hyperparameters.get(
+                            target_model, {}
+                        ):
+                            import torch
 
-                        if str(lower_quantile) in forecast_result.columns.levels[1]:
-                            lower_values = forecast_result.loc[
-                                item_id, str(lower_quantile)
-                            ].tolist()
-                            lower_values = [float(val) for val in lower_values]
-                            confidence_intervals["lower_95"] = lower_values
-
-                        if str(upper_quantile) in forecast_result.columns.levels[1]:
-                            upper_values = forecast_result.loc[
-                                item_id, str(upper_quantile)
-                            ].tolist()
-                            upper_values = [float(val) for val in upper_values]
-                            confidence_intervals["upper_95"] = upper_values
-                    else:
-                        # 信頼区間が取得できない場合は空リスト
-                        confidence_intervals = {"lower_95": [], "upper_95": []}
-                else:
-                    # モックテスト用の処理
-                    try:
-                        # モック用の信頼区間（利用可能な場合）
-                        if hasattr(predictor, "predict_quantiles"):
-                            forecast_quantiles = predictor.predict_quantiles(
-                                time_series_data, quantiles=[0.05, 0.95]
-                            )
-                            # 信頼区間の取得方法も予測結果に合わせて調整
-                            if isinstance(forecast_quantiles, dict):
-                                for q in [0.05, 0.95]:
-                                    try:
-                                        if (
-                                            time_series_data.item_ids[0]
-                                            in forecast_quantiles
-                                        ):
-                                            item_id = time_series_data.item_ids[0]
-                                        else:
-                                            item_id = list(forecast_quantiles.keys())[0]
-
-                                        if q == 0.05:
-                                            confidence_intervals["lower_95"] = (
-                                                forecast_quantiles[item_id][
-                                                    q
-                                                ].values.tolist()
-                                            )
-                                        elif q == 0.95:
-                                            confidence_intervals["upper_95"] = (
-                                                forecast_quantiles[item_id][
-                                                    q
-                                                ].values.tolist()
-                                            )
-                                    except (KeyError, IndexError, AttributeError):
-                                        # アクセスエラーの場合は空リスト
-                                        if q == 0.05:
-                                            confidence_intervals["lower_95"] = []
-                                        elif q == 0.95:
-                                            confidence_intervals["upper_95"] = []
-                            else:
-                                # その他の形式の場合
-                                confidence_intervals = {"lower_95": [], "upper_95": []}
-                        else:
-                            # predict_quantilesメソッドがない場合
-                            confidence_intervals = {"lower_95": [], "upper_95": []}
-                    except Exception as mock_error:
-                        logger.warning(
-                            f"モック信頼区間の取得に失敗しました: {mock_error}"
+                            if (
+                                predefined_hyperparameters[target_model]["torch_dtype"]
+                                == "float32"
+                            ):
+                                predefined_hyperparameters[target_model][
+                                    "torch_dtype"
+                                ] = torch.float32
+                        fit_kwargs["hyperparameters"] = predefined_hyperparameters
+                        fit_kwargs["enable_ensemble"] = False  # アンサンブルを無効化
+                        fit_kwargs["skip_model_selection"] = (
+                            True  # モデル選択をスキップ
                         )
-                        confidence_intervals = {"lower_95": [], "upper_95": []}
-            except Exception as e:
-                logger.warning(f"信頼区間の取得に失敗しました: {e}")
-                confidence_intervals = {"lower_95": [], "upper_95": []}
+                        logger.info(
+                            f"単一モデル設定を適用: {target_model}, "
+                            f"hyperparameters={predefined_hyperparameters}"
+                        )
+                    else:
+                        # 通常の複数モデル設定
+                        fit_kwargs["presets"] = preset
+                        logger.info(f"複数モデル設定を適用: preset={preset}")
 
-            # モデルのメタデータを設定
-            model_metadata = {
-                # テスト互換性のためにmodel_typeはchronos_boltのままにする
-                "model_type": "chronos_bolt",  # 以前のテストとの互換性のため
-                "model_name": "autogluon_timeseries_model",
-                "timestamp": datetime.datetime.now().isoformat(),
-                "confidence_intervals": confidence_intervals,
-                "training_samples": len(values),  # テスト互換性のため追加
-                "preset": preset,  # テスト互換性のため追加
-                "adjusted_horizon": horizon,  # 調整後の予測期間を記録
-            }
+                    # num_val_windows=0の場合はtuning_dataを明示的に指定
+                    if num_val_windows == 0:
+                        fit_kwargs["tuning_data"] = time_series_data
 
-            # 必要に応じて予測値とタイムスタンプをhorizon長に切り詰める
-            if len(forecast_values) > horizon:
-                forecast_values = forecast_values[:horizon]
-                # 予測タイムスタンプも調整されたhorizonに合わせて再生成
-                forecast_timestamps = [
-                    latest_timestamp + delta * (i + 1)
-                    for i in range(len(forecast_values))
-                ]
-                # 信頼区間も同様に切り詰める
-                for key in confidence_intervals:
-                    if len(confidence_intervals[key]) > horizon:
-                        confidence_intervals[key] = confidence_intervals[key][:horizon]
+                    # 直接fitを実行（タイムアウト処理を削除）
+                    predictor.fit(**fit_kwargs)
+                    logger.info("AutoGluon fit が完了しました")
+                except Exception as fit_error:
+                    logger.error(f"AutoGluon fit でエラーが発生しました: {fit_error}")
+                    # エラー時は即座に失敗として処理（フォールバック無し）
+                    raise Exception(
+                        f"モデル '{target_model}' の学習に失敗しました: {fit_error}"
+                    )
 
-            logger.info(
-                f"AutoGluon-TimeSeries による予測が完了しました（{len(forecast_values)}ポイント）"
-            )
+                # 予測を実行
+                forecast_result = predictor.predict(time_series_data)
+                logger.info(f"予測が完了しました: {type(forecast_result)}")
 
-            return forecast_timestamps, forecast_values, model_metadata
+                # 予測結果から値を取得（実際のAPIに合わせて修正）
+                try:
+                    # モックの場合と実際のライブラリの場合で処理を分ける
+                    if hasattr(forecast_result, "item_ids"):
+                        # 実際のAutogluon.timeseriesの結果形式
+                        # 最初のitem_idを取得
+                        item_id = time_series_data.item_ids[0]
+
+                        # 平均値（mean）の予測列を取得
+                        if item_id in forecast_result.item_ids:
+                            # 平均値（point forecast）を取得
+                            forecast_values = forecast_result.loc[
+                                item_id, "mean"
+                            ].tolist()
+                            # 数値型に変換（Numpy型などからPythonのfloatへ）
+                            forecast_values = [float(val) for val in forecast_values]
+                        else:
+                            # item_idが見つからない場合は最初の系列の予測を使用
+                            first_id = forecast_result.item_ids[0]
+                            forecast_values = forecast_result.loc[
+                                first_id, "mean"
+                            ].tolist()
+                            forecast_values = [float(val) for val in forecast_values]
+
+                        logger.info(
+                            f"予測値を正常に取得しました: {len(forecast_values)}ポイント"
+                        )
+                    elif isinstance(forecast_result, dict):
+                        # モックテスト用の辞書形式の場合
+                        item_id = time_series_data.item_ids[0]
+                        if item_id in forecast_result:
+                            # item_idがキーとして存在する場合
+                            forecast_values = forecast_result[item_id].values.tolist()
+                        else:
+                            # キーが異なる構造の場合
+                            first_key = list(forecast_result.keys())[0]
+                            forecast_values = forecast_result[first_key].values.tolist()
+                    elif hasattr(forecast_result, "values"):
+                        # その他のデータフレーム形式の場合
+                        forecast_values = forecast_result.values.tolist()
+                    else:
+                        # その他の形式の場合
+                        forecast_values = list(forecast_result)
+                        if len(forecast_values) == 0:
+                            # 予測値がない場合はゼロ埋め
+                            forecast_values = [0.0] * horizon
+                except Exception as access_error:
+                    logger.warning(
+                        f"予測結果へのアクセス方法が想定と異なります: {access_error}"
+                    )
+                    # エラーが発生した場合は、ゼロ埋めデータを返す
+                    forecast_values = [0.0] * horizon
+
+                # 信頼区間の取得を試みる
+                confidence_intervals = {}
+                try:
+                    # モックの場合と実際のライブラリの場合で処理を分ける
+                    if (
+                        hasattr(forecast_result, "item_ids")
+                        and hasattr(forecast_result, "columns")
+                        and hasattr(forecast_result.columns, "levels")
+                    ):
+                        # AutoGluon.timeseriesの場合
+                        item_id = time_series_data.item_ids[0]
+
+                        if item_id in forecast_result.item_ids:
+                            # 信頼区間（10%と90%分位数など）を使用
+                            lower_quantile = 0.1  # 10%分位数
+                            upper_quantile = 0.9  # 90%分位数
+
+                            if str(lower_quantile) in forecast_result.columns.levels[1]:
+                                lower_values = forecast_result.loc[
+                                    item_id, str(lower_quantile)
+                                ].tolist()
+                                lower_values = [float(val) for val in lower_values]
+                                confidence_intervals["lower_95"] = lower_values
+
+                            if str(upper_quantile) in forecast_result.columns.levels[1]:
+                                upper_values = forecast_result.loc[
+                                    item_id, str(upper_quantile)
+                                ].tolist()
+                                upper_values = [float(val) for val in upper_values]
+                                confidence_intervals["upper_95"] = upper_values
+                        else:
+                            # 信頼区間が取得できない場合は空リスト
+                            confidence_intervals = {"lower_95": [], "upper_95": []}
+                    else:
+                        # モックテスト用の処理
+                        try:
+                            # モック用の信頼区間（利用可能な場合）
+                            if hasattr(predictor, "predict_quantiles"):
+                                forecast_quantiles = predictor.predict_quantiles(
+                                    time_series_data, quantiles=[0.05, 0.95]
+                                )
+                                # 信頼区間の取得方法も予測結果に合わせて調整
+                                if isinstance(forecast_quantiles, dict):
+                                    for q in [0.05, 0.95]:
+                                        try:
+                                            if (
+                                                time_series_data.item_ids[0]
+                                                in forecast_quantiles
+                                            ):
+                                                item_id = time_series_data.item_ids[0]
+                                            else:
+                                                item_id = list(
+                                                    forecast_quantiles.keys()
+                                                )[0]
+
+                                            if q == 0.05:
+                                                confidence_intervals["lower_95"] = (
+                                                    forecast_quantiles[item_id][
+                                                        q
+                                                    ].values.tolist()
+                                                )
+                                            elif q == 0.95:
+                                                confidence_intervals["upper_95"] = (
+                                                    forecast_quantiles[item_id][
+                                                        q
+                                                    ].values.tolist()
+                                                )
+                                        except (KeyError, IndexError, AttributeError):
+                                            # アクセスエラーの場合は空リスト
+                                            if q == 0.05:
+                                                confidence_intervals["lower_95"] = []
+                                            elif q == 0.95:
+                                                confidence_intervals["upper_95"] = []
+                                else:
+                                    # その他の形式の場合
+                                    confidence_intervals = {
+                                        "lower_95": [],
+                                        "upper_95": [],
+                                    }
+                            else:
+                                # predict_quantilesメソッドがない場合
+                                confidence_intervals = {"lower_95": [], "upper_95": []}
+                        except Exception as mock_error:
+                            logger.warning(
+                                f"モック信頼区間の取得に失敗しました: {mock_error}"
+                            )
+                            confidence_intervals = {"lower_95": [], "upper_95": []}
+                except Exception as e:
+                    logger.warning(f"信頼区間の取得に失敗しました: {e}")
+                    confidence_intervals = {"lower_95": [], "upper_95": []}
+
+                # 実際に使用されたモデルの情報を取得
+                trained_models = []
+                try:
+                    if hasattr(predictor, "model_names"):
+                        trained_models = predictor.model_names()
+                    elif hasattr(predictor, "get_model_names"):
+                        trained_models = predictor.get_model_names()
+                    elif hasattr(predictor, "_trainer") and hasattr(
+                        predictor._trainer, "model_names"
+                    ):
+                        trained_models = list(predictor._trainer.model_names())
+                    else:
+                        trained_models = ["unknown"]
+                    logger.info(f"実際に訓練されたモデル: {trained_models}")
+                except Exception as e:
+                    logger.warning(f"訓練されたモデル名の取得に失敗: {e}")
+                    trained_models = ["unknown"]
+
+                # モデルのメタデータを設定
+                model_metadata = {
+                    # テスト互換性のためにmodel_typeはchronos_boltのままにする
+                    "model_type": "chronos_bolt",  # 以前のテストとの互換性のため
+                    "model_name": "autogluon_timeseries_model",
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "confidence_intervals": confidence_intervals,
+                    "training_samples": len(values),  # テスト互換性のため追加
+                    "preset": preset,  # テスト互換性のため追加
+                    "adjusted_horizon": horizon,  # 調整後の予測期間を記録
+                    "use_single_model": use_single_model,  # 単一モデル設定フラグ
+                    "target_model": target_model,  # 指定されたターゲットモデル
+                    "trained_models": trained_models,  # 実際に訓練されたモデル一覧
+                }
+
+                # 必要に応じて予測値とタイムスタンプをhorizon長に切り詰める
+                if len(forecast_values) > horizon:
+                    forecast_values = forecast_values[:horizon]
+                    # 予測タイムスタンプも調整されたhorizonに合わせて再生成
+                    forecast_timestamps = [
+                        latest_timestamp + delta * (i + 1)
+                        for i in range(len(forecast_values))
+                    ]
+                    # 信頼区間も同様に切り詰める
+                    for key in confidence_intervals:
+                        if len(confidence_intervals[key]) > horizon:
+                            confidence_intervals[key] = confidence_intervals[key][
+                                :horizon
+                            ]
+
+                logger.info(
+                    f"AutoGluon-TimeSeries による予測が完了しました（{len(forecast_values)}ポイント）"
+                )
+
+                return forecast_timestamps, forecast_values, model_metadata
 
         except Exception as e:
             logger.error(f"AutoGluon-TimeSeries による予測に失敗しました: {e}")

@@ -1,6 +1,141 @@
 # モデル設定
 
-# デフォルトモデル設定
+# 利用可能なモデル一覧
+available_models:
+  - name: "fast_statistical"
+    version: "1.0.0"
+    description: "統計的手法中心・高速モデル（5分以内）- SeasonalNaive、AutoETS、RecursiveTabular等"
+    chronos:
+      model_type: "autogluon"
+      presets: "light"
+      time_limit: 300
+      excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
+      primary_models: ["SeasonalNaive", "AutoETS", "RecursiveTabular", "DirectTabular"]
+      use_case: "短期予測・リアルタイム処理"
+      expected_accuracy: "中程度（統計的手法の限界）"
+      recommended_for: ["アルゴリズム取引", "リアルタイム監視", "高頻度予測"]
+
+  - name: "balanced_ml"
+    version: "1.0.0"
+    description: "機械学習ベース・バランス型モデル（15分以内）- NPTS、DynamicOptimizedTheta等"
+    chronos:
+      model_type: "autogluon"
+      presets: "medium_quality"
+      time_limit: 900
+      excluded_model_types: ["Naive", "Chronos"]
+      primary_models: ["NPTS", "DynamicOptimizedTheta", "AutoETS", "RecursiveTabular", "DirectTabular"]
+      use_case: "中期予測・バランス重視"
+      expected_accuracy: "高程度（ML手法の強み）"
+      recommended_for: ["リスク分析", "ポートフォリオ管理", "中期戦略"]
+
+  - name: "deep_learning"
+    version: "1.0.0"
+    description: "深層学習ベース・高精度モデル（30分以内）- ChronosZeroShot、TemporalFusionTransformer、DeepAR等"
+    chronos:
+      model_type: "autogluon"
+      presets: "high_quality"
+      time_limit: 1800
+      excluded_model_types: ["Naive"]
+      primary_models: ["ChronosZeroShot", "TemporalFusionTransformer", "DeepAR", "PatchTST", "TiDE", "NPTS"]
+      use_case: "長期予測・最高精度"
+      expected_accuracy: "最高程度（深層学習の力）"
+      recommended_for: ["戦略立案", "投資計画", "長期予測分析"]
+
+  # 単一モデル設定
+  - name: "autoets_only"
+    version: "1.0.0"
+    description: "AutoETSモデルのみ（統計的手法・高速）- エラー、トレンド、季節性を自動選択"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 300
+      use_single_model: true
+      target_model: "AutoETSModel"
+      hyperparameters:
+        AutoETSModel:
+          model: "ZZZ"  # 自動モデル選択
+          seasonal_period: null  # 自動季節性検出
+      use_case: "短期予測・統計的手法"
+      expected_accuracy: "中程度（ETS統計モデル）"
+      recommended_for: ["短期予測", "統計的手法", "高速処理"]
+
+  - name: "npts_only"
+    version: "1.0.0"
+    description: "NPTSモデルのみ（非パラメトリック時系列・高精度）- 柔軟な時系列パターン学習"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 600
+      use_single_model: true
+      target_model: "NPTSModel"
+      hyperparameters:
+        NPTSModel: {}
+      use_case: "中期予測・非パラメトリック手法"
+      expected_accuracy: "高程度（ML手法）"
+      recommended_for: ["中期予測", "非パラメトリック手法", "パターン学習"]
+
+  - name: "seasonal_naive_only"
+    version: "1.0.0"
+    description: "SeasonalNaiveモデルのみ（季節性ベースライン・超高速）- 季節パターンの単純繰り返し"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 60
+      use_single_model: true
+      target_model: "SeasonalNaiveModel"
+      hyperparameters:
+        SeasonalNaiveModel: {}
+      use_case: "ベースライン予測・リアルタイム処理"
+      expected_accuracy: "低程度（ベースライン）"
+      recommended_for: ["ベースライン予測", "リアルタイム処理", "超高速処理"]
+
+  - name: "recursive_tabular_only"
+    version: "1.0.0"
+    description: "RecursiveTabularモデルのみ（勾配ブースティング・高精度）- 回帰問題として時系列予測"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 900
+      use_single_model: true
+      target_model: "RecursiveTabularModel"
+      hyperparameters:
+        RecursiveTabularModel:
+          tabular_hyperparameters:
+            GBM: {}
+          max_num_items: 20000
+          max_num_samples: 1000000
+      use_case: "中長期予測・勾配ブースティング"
+      expected_accuracy: "高程度（ML手法）"
+      recommended_for: ["中長期予測", "勾配ブースティング", "高精度予測"]
+
+  - name: "ets_only"
+    version: "1.0.0"
+    description: "ETSモデルのみ（統計的手法・標準）- エラー、トレンド、季節性の手動設定"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 300
+      use_single_model: true
+      target_model: "ETSModel"
+      hyperparameters:
+        ETSModel: {}
+      use_case: "短期予測・統計的手法"
+      expected_accuracy: "中程度（ETS統計モデル）"
+      recommended_for: ["短期予測", "統計的手法", "標準ETS"]
+
+  - name: "chronos_bolt"
+    version: "1.1.0"
+    description: "Chronos-Bolt高速事前訓練済みTransformer（CPU対応Zero Shot予測）"
+    chronos:
+      model_type: "autogluon"
+      time_limit: 300
+      use_single_model: true
+      target_model: "Chronos"
+      hyperparameters:
+        Chronos:
+          model_path: "autogluon/chronos-bolt-base"  # Chronos-Bolt Base: 205Mパラメータ、高精度と速度のバランス
+          device: "cpu"  # 安定性を優先してCPU使用
+          torch_dtype: "float32"  # MPS互換性のため
+      use_case: "訓練不要の即座予測・真のZero Shot"
+      expected_accuracy: "高程度（事前訓練済みTransformer）"
+      recommended_for: ["即座予測", "訓練データ不足", "Zero Shot予測"]
+
+# デフォルトモデル設定（後方互換性）
 default_model:
   name: "chronos_default"
   version: "1.0.0"
@@ -8,13 +143,35 @@ default_model:
 
   # chronos-bolt設定
   chronos:
-    model_type: "prophet"  # 'prophet', 'arima', 'lstm' など
+    model_type: "autogluon"  # 'prophet', 'arima', 'lstm', 'autogluon'
     forecast_horizon: 24   # 予測期間（時間単位）
     frequency: "H"         # 'H'（時間）, 'D'（日）, 'W'（週）など
     seasonality_mode: "multiplicative"
-    bolt_size: "base"      # "tiny", "mini", "small", "base" から選択
+    bolt_size: "base"      # "fast_statistical", "balanced_ml", "deep_learning" から選択
     eval_metric: "mean_absolute_error"
     verbosity: 2
+    presets: "medium_quality"
+    time_limit: 900
+    excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
+
+# サーバーデフォルトモデル設定（CLIで使用）
+server_default:
+  name: "server_default"
+  version: "1.0.0"
+  description: "サーバーデフォルトの時系列予測モデル"
+
+  # chronos-bolt設定
+  chronos:
+    model_type: "autogluon"
+    forecast_horizon: 24
+    frequency: "H"
+    seasonality_mode: "multiplicative"
+    bolt_size: "base"
+    eval_metric: "mean_absolute_error"
+    verbosity: 2
+    presets: "medium_quality"
+    time_limit: 900
+    excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
 
     # Prophetモデル固有のパラメータ
     prophet_params:
@@ -40,9 +197,9 @@ default_model:
 
     # AutoGluon固有のパラメータ
     autogluon_params:
-      time_limit: 60  # 学習時間制限（秒）
+      time_limit: 900  # 学習時間制限（秒）
       eval_metric: "mean_absolute_error"
-      presets: "base"
+      presets: "medium_quality"
 
 # 学習設定
 training:

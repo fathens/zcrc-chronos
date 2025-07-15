@@ -174,10 +174,9 @@ class FileBasedQueue:
         self.queue_dir = Path(queue_dir)
         self.pending_dir = self.queue_dir / "pending"
         self.processing_dir = self.queue_dir / "processing"
-        self.completed_dir = self.queue_dir / "completed"
 
         # ディレクトリ作成
-        for dir_path in [self.pending_dir, self.processing_dir, self.completed_dir]:
+        for dir_path in [self.pending_dir, self.processing_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
 
         self.lock = threading.RLock()
@@ -238,29 +237,15 @@ class FileBasedQueue:
             return None
 
     def mark_completed(self, task_id: str, success: bool = True):
-        """タスクを完了済みとしてマーク"""
+        """タスクを完了としてprocessingファイルを削除"""
         try:
             with self.lock:
                 processing_file = self.processing_dir / f"{task_id}.json"
                 if processing_file.exists():
-                    # ファイルを更新
-                    with open(processing_file, "r") as f:
-                        task_data = json.load(f)
-
-                    task_data["completed_at"] = datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat()
-                    task_data["success"] = success
-
-                    # completedディレクトリに移動
-                    completed_file = self.completed_dir / processing_file.name
-                    with open(completed_file, "w") as f:
-                        json.dump(task_data, f, indent=2)
-
                     processing_file.unlink()
-                    logger.info(f"タスク {task_id} を完了済みとしてマークしました")
+                    logger.info(f"タスク {task_id} のprocessingファイルを削除しました")
         except Exception as e:
-            logger.error(f"タスク完了マークに失敗: {e}")
+            logger.error(f"タスク完了処理に失敗: {e}")
 
     def get_queue_size(self) -> int:
         """待機中のタスク数を取得"""

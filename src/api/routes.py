@@ -430,7 +430,17 @@ class PredictionQueue:
                     if self.file_queue:
                         self.file_queue.mark_completed(captured_task_id, True)
                     # TaskManagerの状態も更新
-                    task_manager.update_task_status(captured_task_id, "completed")
+                    try:
+                        task_manager.update_task(
+                            captured_task_id, status=PredictionStatus.COMPLETED
+                        )
+                        logger.info(
+                            f"タスク {captured_task_id} のTaskManager状態を更新しました"
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"タスク {captured_task_id} のTaskManager状態更新に失敗: {e}"
+                        )
                     logger.info(f"タスク {captured_task_id} が完了しました")
 
                 future.add_done_callback(lambda f, tid=task_id: on_task_complete(tid))

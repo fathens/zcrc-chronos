@@ -32,6 +32,14 @@ data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
   models_dir: "data/models"
+  queue_dir: "data/queue"  # 永続化キューディレクトリ
+
+# 並列処理設定
+prediction:
+  max_concurrent_tasks: 3  # 同時実行可能な予測タスク数
+  queue_storage: "file"    # file: ファイルベース, memory: メモリベース
+  queue_size: -1           # -1: 無制限（ファイルベースの場合）
+  autogluon_n_jobs: 1      # AutoGluon内部の並列度制限
 
 # セキュリティ設定
 security:

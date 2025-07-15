@@ -3,11 +3,15 @@ APIルーティングを定義するモジュール
 """
 
 import datetime
+import json
 import os
+import queue
 import threading
+import time
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -55,8 +59,6 @@ def load_model_config():
             status_code=500, detail="モデル設定の読み込みに失敗しました"
         )
 
-
-config = load_config()
 
 # APIルーターの作成
 router = APIRouter()
@@ -164,11 +166,325 @@ class TaskManager:
                     del self._futures[task_id]
 
 
+# ファイルベースキューシステム
+class FileBasedQueue:
+    """ファイルベースの永続化キューシステム"""
+
+    def __init__(self, queue_dir: str):
+        self.queue_dir = Path(queue_dir)
+        self.pending_dir = self.queue_dir / "pending"
+        self.processing_dir = self.queue_dir / "processing"
+        self.completed_dir = self.queue_dir / "completed"
+
+        # ディレクトリ作成
+        for dir_path in [self.pending_dir, self.processing_dir, self.completed_dir]:
+            dir_path.mkdir(parents=True, exist_ok=True)
+
+        self.lock = threading.RLock()
+
+    def enqueue(self, task_id: str, request_data: dict) -> bool:
+        """タスクをキューに追加"""
+        try:
+            with self.lock:
+                task_file = self.pending_dir / f"{task_id}.json"
+                task_data = {
+                    "task_id": task_id,
+                    "request": request_data,
+                    "enqueued_at": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
+                    "priority": 0,  # 将来の拡張用
+                }
+
+                with open(task_file, "w") as f:
+                    json.dump(task_data, f, indent=2)
+
+                logger.info(
+                    f"タスク {task_id} をファイルキューに追加しました: {task_file}"
+                )
+                return True
+        except Exception as e:
+            logger.error(f"タスクキューへの追加に失敗: {e}")
+            return False
+
+    def dequeue(self) -> Optional[Tuple[str, dict]]:
+        """キューから最古のタスクを取得"""
+        try:
+            with self.lock:
+                # pendingディレクトリから最古のファイルを取得
+                pending_files = list(self.pending_dir.glob("*.json"))
+                if not pending_files:
+                    return None
+
+                # ファイル作成時刻でソート
+                oldest_file = min(pending_files, key=lambda f: f.stat().st_ctime)
+
+                # ファイルを読み込み
+                with open(oldest_file, "r") as f:
+                    task_data = json.load(f)
+
+                task_id = task_data["task_id"]
+                request_data = task_data["request"]
+
+                # ファイルをprocessingディレクトリに移動
+                processing_file = self.processing_dir / oldest_file.name
+                oldest_file.rename(processing_file)
+
+                logger.info(f"タスク {task_id} をキューから取得しました")
+                return task_id, request_data
+
+        except Exception as e:
+            logger.error(f"キューからの取得に失敗: {e}")
+            return None
+
+    def mark_completed(self, task_id: str, success: bool = True):
+        """タスクを完了済みとしてマーク"""
+        try:
+            with self.lock:
+                processing_file = self.processing_dir / f"{task_id}.json"
+                if processing_file.exists():
+                    # ファイルを更新
+                    with open(processing_file, "r") as f:
+                        task_data = json.load(f)
+
+                    task_data["completed_at"] = datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat()
+                    task_data["success"] = success
+
+                    # completedディレクトリに移動
+                    completed_file = self.completed_dir / processing_file.name
+                    with open(completed_file, "w") as f:
+                        json.dump(task_data, f, indent=2)
+
+                    processing_file.unlink()
+                    logger.info(f"タスク {task_id} を完了済みとしてマークしました")
+        except Exception as e:
+            logger.error(f"タスク完了マークに失敗: {e}")
+
+    def get_queue_size(self) -> int:
+        """待機中のタスク数を取得"""
+        try:
+            return len(list(self.pending_dir.glob("*.json")))
+        except Exception:
+            return 0
+
+    def get_processing_count(self) -> int:
+        """実行中のタスク数を取得"""
+        try:
+            return len(list(self.processing_dir.glob("*.json")))
+        except Exception:
+            return 0
+
+    def reset_processing_to_pending(self):
+        """processingディレクトリの全ファイルをpendingに戻す（起動時リカバリ用）"""
+        try:
+            with self.lock:
+                processing_files = list(self.processing_dir.glob("*.json"))
+                for processing_file in processing_files:
+                    pending_file = self.pending_dir / processing_file.name
+                    processing_file.rename(pending_file)
+                    logger.info(
+                        f"ファイル {processing_file.name} をpendingに戻しました"
+                    )
+                logger.info(
+                    f"{len(processing_files)}個のファイルをprocessingからpendingに戻しました"
+                )
+        except Exception as e:
+            logger.error(f"processingファイルのリカバリに失敗: {e}")
+
+
+# キューイングシステム
+class PredictionQueue:
+    """予測タスクのキューイングシステム（ファイルベース対応）"""
+
+    def __init__(
+        self,
+        max_concurrent_tasks: int = 2,
+        queue_storage: str = "memory",
+        queue_size: int = 10,
+        queue_dir: str = None,
+    ):
+        self.max_concurrent_tasks = max_concurrent_tasks
+        self.queue_storage = queue_storage
+        self.queue_size = queue_size
+        self.running_tasks = {}  # task_id -> Future
+        self.lock = threading.RLock()
+
+        if queue_storage == "file" and queue_dir:
+            self.file_queue = FileBasedQueue(queue_dir)
+            # 起動時リカバリ：processingファイルをpendingに戻す
+            self.file_queue.reset_processing_to_pending()
+            self.memory_queue = None
+        else:
+            self.memory_queue = queue.Queue(maxsize=queue_size)
+            self.file_queue = None
+
+        self.worker_thread = threading.Thread(target=self._worker, daemon=True)
+        self.worker_thread.start()
+
+    def submit_task(self, task_id: str, request) -> bool:
+        """タスクをキューに追加"""
+        try:
+            if self.file_queue:
+                # ファイルベースキュー（無制限）
+                # requestオブジェクトをJSON化可能な辞書に変換
+                request_dict = {}
+                for key, value in request.__dict__.items():
+                    if isinstance(value, datetime.datetime):
+                        request_dict[key] = value.isoformat()
+                    elif (
+                        isinstance(value, list)
+                        and value
+                        and isinstance(value[0], datetime.datetime)
+                    ):
+                        request_dict[key] = [v.isoformat() for v in value]
+                    else:
+                        request_dict[key] = value
+                return self.file_queue.enqueue(task_id, request_dict)
+            else:
+                # メモリベースキュー（サイズ制限あり）
+                self.memory_queue.put((task_id, request), block=False)
+                logger.info(f"タスク {task_id} をメモリキューに追加しました")
+                return True
+        except queue.Full:
+            logger.warning("タスクキューが満杯です")
+            return False
+        except Exception as e:
+            logger.error(f"タスクキューへの追加に失敗: {e}")
+            return False
+
+    def _worker(self):
+        """ワーカースレッド - キューからタスクを取り出して実行"""
+        while True:
+            try:
+                # 実行中タスク数をまずチェック
+                with self.lock:
+                    if len(self.running_tasks) >= self.max_concurrent_tasks:
+                        time.sleep(1.0)
+                        continue
+
+                # キューからタスクを取得（並列度に余裕がある場合のみ）
+                if self.file_queue:
+                    # ファイルベースキュー
+                    task_data = self.file_queue.dequeue()
+                    if task_data is None:
+                        time.sleep(1.0)
+                        continue
+                    task_id, request_dict = task_data
+                    # 辞書からRequestオブジェクトを復元
+                    from types import SimpleNamespace
+
+                    # datetime文字列を復元
+                    for key, value in request_dict.items():
+                        if (
+                            isinstance(value, str)
+                            and key in ["forecast_until"]
+                            and "T" in value
+                        ):
+                            try:
+                                request_dict[key] = datetime.datetime.fromisoformat(
+                                    value.replace("Z", "+00:00")
+                                )
+                            except (ValueError, TypeError):
+                                pass  # 復元に失敗した場合は文字列のまま
+                        elif (
+                            isinstance(value, list)
+                            and value
+                            and isinstance(value[0], str)
+                            and "T" in value[0]
+                        ):
+                            try:
+                                request_dict[key] = [
+                                    datetime.datetime.fromisoformat(
+                                        v.replace("Z", "+00:00")
+                                    )
+                                    for v in value
+                                ]
+                            except (ValueError, TypeError):
+                                pass  # 復元に失敗した場合はリストのまま
+                    request = SimpleNamespace(**request_dict)
+                else:
+                    # メモリベースキュー
+                    task_id, request = self.memory_queue.get(timeout=1.0)
+
+                # タスクを実行
+                logger.info(f"タスク {task_id} の実行を開始します")
+
+                # タスクステータスを実行中に更新
+                task_manager.update_task(
+                    task_id,
+                    status=PredictionStatus.RUNNING,
+                    message="予測処理を実行中です",
+                )
+
+                # ThreadPoolExecutorでタスクを実行
+                future = executor.submit(run_prediction_task, task_id, request)
+
+                with self.lock:
+                    self.running_tasks[task_id] = future
+
+                # タスク完了を監視
+                def on_task_complete(captured_task_id):
+                    with self.lock:
+                        if captured_task_id in self.running_tasks:
+                            del self.running_tasks[captured_task_id]
+                    # ファイルベースキューの場合は完了マーク
+                    if self.file_queue:
+                        self.file_queue.mark_completed(captured_task_id, True)
+                    logger.info(f"タスク {captured_task_id} が完了しました")
+
+                future.add_done_callback(lambda f, tid=task_id: on_task_complete(tid))
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                logger.error(f"ワーカースレッドでエラーが発生しました: {e}")
+
+
 # グローバルタスクマネージャーのインスタンス
 task_manager = TaskManager()
 
+# 設定を読み込んで並列処理を設定
+try:
+    config = load_config()
+    prediction_config = config.get("prediction", {})
+    data_config = config.get("data", {})
+
+    max_concurrent_tasks = prediction_config.get("max_concurrent_tasks", 2)
+    queue_storage = prediction_config.get("queue_storage", "memory")
+    queue_size = prediction_config.get("queue_size", 10)
+    queue_dir = data_config.get("queue_dir", "data/queue")
+
+    # queue_size = -1 の場合は無制限とみなし、ファイルベースを強制
+    if queue_size == -1:
+        queue_storage = "file"
+        queue_size = 0  # ファイルベースでは使用しない
+
+except Exception as e:
+    logger.warning(f"設定ファイルの読み込みに失敗、デフォルト値を使用: {e}")
+    max_concurrent_tasks = 2
+    queue_storage = "memory"
+    queue_size = 10
+    queue_dir = "data/queue"
+
+# キューイングシステムのインスタンス
+prediction_queue = PredictionQueue(
+    max_concurrent_tasks=max_concurrent_tasks,
+    queue_storage=queue_storage,
+    queue_size=queue_size,
+    queue_dir=queue_dir,
+)
+
+logger.info(
+    f"キューイングシステムを初期化しました: storage={queue_storage}, "
+    f"max_concurrent={max_concurrent_tasks}, queue_size={queue_size}"
+)
+
 # ThreadPoolExecutor for running prediction tasks
-executor = ThreadPoolExecutor(max_workers=4)
+executor = ThreadPoolExecutor(
+    max_workers=max_concurrent_tasks * 2
+)  # キューイング用に少し多めに設定
 
 
 def validate_model_name(model_name: str) -> bool:
@@ -659,11 +975,27 @@ async def predict_zero_shot_async(request: AsyncPredictionRequest):
             updated_at=now,
         )
 
-        # Futureオブジェクトを作成してタスクを送信
-        future = executor.submit(run_prediction_task, task_id, request)
+        # タスクマネージャーにタスクを追加
+        task_manager.add_task(task_id, task)
 
-        # タスクマネージャーにタスクとFutureを追加
-        task_manager.add_task(task_id, task, future)
+        # キューイングシステムにタスクを送信
+        if not prediction_queue.submit_task(task_id, request):
+            task_manager.update_task(
+                task_id,
+                status=PredictionStatus.FAILED,
+                message="タスクキューが満杯です。しばらく時間をおいて再試行してください。",
+            )
+            raise HTTPException(
+                status_code=503,
+                detail="サーバーが混雑しています。しばらく時間をおいて再試行してください。",
+            )
+
+        # タスクをキューに入れた状態に更新
+        task_manager.update_task(
+            task_id,
+            status=PredictionStatus.PENDING,
+            message="予測タスクがキューに登録されました",
+        )
 
         logger.info(f"非同期予測タスクを開始しました: {task_id}")
         return AsyncPredictionResponse(

@@ -6,7 +6,7 @@ server:
   port: 8000
   debug: true
   workers: 4
-  reload: true  # 開発環境用
+  reload: false  # Dockerコンテナではファイル変更監視は不要（本番環境モード）
 
 # API設定
 api:

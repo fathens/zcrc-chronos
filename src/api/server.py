@@ -142,7 +142,7 @@ def start_server():
         "src.api.server:app",
         host=config["server"]["host"],
         port=config["server"]["port"],
-        reload=config["server"]["debug"],
+        reload=config["server"]["reload"],
         log_level=config["logging"]["level"].lower(),
         timeout_keep_alive=2000,  # 33分20秒のkeep-aliveタイムアウト
         timeout_graceful_shutdown=60,  # 60秒のグレースフルシャットダウン

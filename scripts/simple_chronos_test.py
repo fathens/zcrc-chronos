@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Chronos Zero Shot 簡単動作確認スクリプト
+Chronos-Bolt 簡単動作確認スクリプト
 システムPython用（conda環境不要）
 """
 
@@ -11,7 +11,7 @@ import requests
 
 
 def main():
-    print("🎯 Chronos Zero Shot 簡単動作確認")
+    print("🎯 Chronos-Bolt 簡単動作確認")
     print("=" * 50)
     print("📍 システムPython使用（conda環境不要）")
 
@@ -28,16 +28,16 @@ def main():
         return
 
     # 2. 利用可能モデル確認
-    print("\n🔍 Step 2: chronos_zero_shot モデル確認")
+    print("\n🔍 Step 2: chronos_bolt モデル確認")
     try:
         response = requests.get(f"{base_url}/api/v1/models", timeout=5)
         models = [model["name"] for model in response.json()]
 
-        if "chronos_zero_shot" in models:
-            print("✅ chronos_zero_shot モデル利用可能")
+        if "chronos_bolt" in models:
+            print("✅ chronos_bolt モデル利用可能")
             print(f"📋 全モデル: {len(models)}個")
         else:
-            print("❌ chronos_zero_shot モデルが見つかりません")
+            print("❌ chronos_bolt モデルが見つかりません")
             print(f"📋 利用可能: {models}")
             return
 
@@ -46,7 +46,7 @@ def main():
         return
 
     # 3. 簡単な予測テスト
-    print("\n🔍 Step 3: Chronos Zero Shot 予測テスト")
+    print("\n🔍 Step 3: Chronos-Bolt 予測テスト")
 
     # シンプルなテストデータ
     base_value = random.randint(100, 150)
@@ -59,11 +59,11 @@ def main():
         ],
         "values": [base_value, base_value + 2, base_value + 1, base_value + 3],
         "forecast_until": "2023-01-01T06:00:00",
-        "model_name": "chronos_zero_shot",
+        "model_name": "chronos_bolt",
     }
 
     print(f"📊 入力値: {test_data['values']}")
-    print("🚀 真のChronos Transformer予測開始...")
+    print("🚀 Chronos-Bolt高速予測開始...")
 
     try:
         start_time = time.time()
@@ -93,11 +93,11 @@ def main():
     # 4. 結果
     print("\n🎉 テスト完了")
     print("=" * 50)
-    print("✅ **真のChronos Transformerが動作中**")
-    print("   - モデル: amazon/chronos-t5-tiny")
-    print("   - GPU: Apple Silicon MPS")
+    print("✅ **Chronos-Bolt高速Transformerが動作中**")
+    print("   - モデル: autogluon/chronos-bolt-base")
+    print("   - 実行: CPU (高速&安定)")
     print("   - クライアント: システムPython (conda不要)")
-    print("   - サーバー: conda環境 (GPU対応)")
+    print("   - サーバー: conda環境 (CPU高速実行)")
 
 
 if __name__ == "__main__":

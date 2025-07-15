@@ -163,7 +163,7 @@ python test_single_models.py
 - `npts`を指定した場合：NPTSのみが訓練される
 - `seasonal_naive`を指定した場合：SeasonalNaiveのみが訓練される
 - `recursive_tabular`を指定した場合：RecursiveTabularのみが訓練される
-- `chronos_zero_shot`を指定した場合：ChronosZeroShotのみが訓練される
+- `chronos_bolt`を指定した場合：Chronos-Boltのみが使用される（事前訓練済み）
 - `dynamic_theta`を指定した場合：DynamicOptimizedThetaのみが訓練される
 - `temporal_fusion_transformer`を指定した場合：TemporalFusionTransformerのみが訓練される
 - `deepar`を指定した場合：DeepARのみが訓練される

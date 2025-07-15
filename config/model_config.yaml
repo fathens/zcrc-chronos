@@ -118,9 +118,9 @@ available_models:
       expected_accuracy: "中程度（ETS統計モデル）"
       recommended_for: ["短期予測", "統計的手法", "標準ETS"]
 
-  - name: "chronos_zero_shot"
-    version: "1.0.0"
-    description: "Chronos事前訓練済みTransformer（真のZero Shot予測）"
+  - name: "chronos_bolt"
+    version: "1.1.0"
+    description: "Chronos-Bolt高速事前訓練済みTransformer（CPU対応Zero Shot予測）"
     chronos:
       model_type: "autogluon"
       time_limit: 300

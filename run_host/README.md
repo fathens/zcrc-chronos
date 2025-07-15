@@ -1,6 +1,6 @@
-# ホスト環境実行 (Apple Silicon GPU対応)
+# ホスト環境実行 (Apple Silicon 対応)
 
-Apple Silicon Mac (M1/M2/M4) のMetal Performance Shaders (MPS) を活用してChronosモデルをGPUで実行するためのセットアップです。
+Apple Silicon Mac (M1/M2/M4) でChronos-Boltモデルを高速・CPU実行するためのセットアップです。
 
 ## クイックスタート
 
@@ -21,9 +21,9 @@ conda env create -f environment.yml
 conda activate zcrc-chronos
 ```
 
-### 3. GPU対応確認
+### 3. PyTorch動作確認
 ```bash
-python -c "import torch; print(f'MPS available: {torch.backends.mps.is_available()}')"
+python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 ```
 
 ### 4. サーバー起動
@@ -33,25 +33,26 @@ python -c "import torch; print(f'MPS available: {torch.backends.mps.is_available
 
 ## 特徴
 
-- ✅ **Apple Silicon GPU (MPS) 対応**: M1/M2/M4チップのGPUを活用
-- ✅ **真のChronos Zero Shot**: 事前訓練済みTransformerモデル
-- ✅ **自動フォールバック**: GPU利用不可時はCPUで実行
+- ✅ **Apple Silicon 最適化**: M1/M2/M4チップで高速動作
+- ✅ **Chronos-Bolt 高速モデル**: 600倍高速な事前訓練済みTransformer
+- ✅ **CPU安定実行**: 互換性問題を回避した安定動作
 - ✅ **依存関係自動管理**: environment.ymlで一括管理
 
-## GPU対応モデル
+## 高速モデル
 
-以下のモデルでGPU (MPS) が活用されます：
+以下のモデルがCPUで高速動作します：
 
-- `chronos_zero_shot`: Chronos事前訓練済みTransformer
-- `deep_learning`: ChronosZeroShot等の深層学習モデル含む
+- `chronos_bolt`: Chronos-Bolt高速事前訓練済みTransformer（CPU専用）
+- `deep_learning`: 従来の深層学習モデル群
 
 ## 環境変数
 
 スクリプト内で以下の環境変数が設定されます：
 
 ```bash
-export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0  # MPS メモリ管理
-export PYTORCH_ENABLE_MPS_FALLBACK=1          # MPS フォールバック有効
+export PYTORCH_ENABLE_MPS_FALLBACK=1          # Apple Silicon互換性確保
+export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0   # メモリ使用量最適化
+export TOKENIZERS_PARALLELISM=false           # 並列処理競合回避
 ```
 
 ## ログ管理
@@ -101,13 +102,13 @@ logging:
 
 ## トラブルシューティング
 
-### MPS利用不可の場合
+### Chronos-Bolt動作確認
 ```bash
 # PyTorchバージョン確認
 python -c "import torch; print(torch.__version__)"
 
-# MPS対応確認
-python -c "import torch; print(torch.backends.mps.is_built())"
+# AutoGluon動作確認
+python -c "from autogluon.timeseries import TimeSeriesPredictor; print('AutoGluon OK')"
 ```
 
 ### 依存関係エラー
@@ -139,7 +140,7 @@ grep "$(date +%Y-%m-%d)" run_host/logs/app*.log
 
 ## パフォーマンス比較
 
-| 環境 | 実行場所 | GPU | Chronosモデル |
+| 環境 | 実行場所 | 処理 | Chronosモデル |
 |------|----------|-----|---------------|
-| Docker | コンテナ内 | ❌ CPU | 疑似Zero Shot (SeasonalNaive) |
-| Host | macOS直接 | ✅ MPS | 真のZero Shot (Chronos) |
+| Docker | コンテナ内 | CPU | 統計モデル群 (SeasonalNaive等) |
+| Host | macOS直接 | CPU | Chronos-Bolt高速 (600倍高速) |

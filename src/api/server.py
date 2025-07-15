@@ -41,7 +41,7 @@ config = load_config()
 # loguruの設定
 def configure_logging():
     """
-    loguruのログ設定を行う
+    loguruのログ設定を行う（標準出力のみ）
     """
     try:
         # テスト環境かどうかを判定
@@ -58,18 +58,10 @@ def configure_logging():
             )
             return
 
-        # プロジェクトルートのパスを取得
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        log_file_path = os.path.join(project_root, config["logging"]["file"])
-
-        # ディレクトリが存在しない場合は作成
-        log_dir = os.path.dirname(log_file_path)
-        os.makedirs(log_dir, exist_ok=True)
-
         # 既存のハンドラーを削除
         logger.remove()
 
-        # コンソール出力を追加
+        # 標準出力のみに出力
         logger.add(
             sink=lambda msg: print(msg, end=""),
             format=config["logging"]["format"],
@@ -77,18 +69,7 @@ def configure_logging():
             catch=False,  # エラーをキャッチしない
         )
 
-        # ファイル出力を追加
-        logger.add(
-            sink=log_file_path,
-            format=config["logging"]["format"],
-            level=config["logging"]["level"],
-            rotation=config["logging"]["rotation"],
-            retention=config["logging"]["retention"],
-            encoding="utf-8",
-            catch=False,  # エラーをキャッチしない
-        )
-
-        logger.info(f"ログ設定完了: {log_file_path}")
+        logger.info("ログ設定完了: 標準出力のみ")
 
     except Exception:
         # 設定が失敗した場合はデフォルトのロガーを使用

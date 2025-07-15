@@ -22,9 +22,10 @@ api:
 logging:
   level: "INFO"
   format: "{time} | {level} | {message}"
-  file: "run_host/logs/app.log"
-  rotation: "10 MB"  # より頻繁なローテーション
-  retention: 10       # 10個のファイルを保持（数値で指定）
+  # ファイル出力は使用しない（標準出力のみ）
+  file: null
+  rotation: null
+  retention: null
 
 # データ設定
 data:

@@ -112,21 +112,23 @@ class TaskManager:
         with self._lock:
             if task_id in self._futures:
                 future = self._futures[task_id]
-                if future.cancel():
-                    self.update_task(
-                        task_id,
-                        status=PredictionStatus.CANCELLED,
-                        message="タスクがキャンセルされました",
-                    )
-                    return True
-                else:
-                    # 既に実行中の場合は状態のみ更新
-                    self.update_task(
-                        task_id,
-                        status=PredictionStatus.CANCELLED,
-                        message="タスクのキャンセルが要求されました",
-                    )
-                    return False
+                cancelled = future.cancel()
+
+                # どちらの場合でもステータスをCANCELLEDに更新
+                self.update_task(
+                    task_id,
+                    status=PredictionStatus.CANCELLED,
+                    message="タスクがキャンセルされました",
+                )
+                return cancelled
+            elif task_id in self._tasks:
+                # futureが登録されていない場合でも、タスクが存在すればキャンセル可能
+                self.update_task(
+                    task_id,
+                    status=PredictionStatus.CANCELLED,
+                    message="タスクがキャンセルされました",
+                )
+                return True
             return False
 
     def _cleanup_old_tasks(self):

@@ -199,7 +199,7 @@ class FileBasedQueue:
                     json.dump(task_data, f, indent=2)
 
                 logger.info(
-                    f"タスク {task_id} をファイルキューに追加しました: {task_file}"
+                    f"タスク {task_id} をファイルキューに追加しました: {task_file.absolute()}"
                 )
                 return True
         except Exception as e:
@@ -212,6 +212,10 @@ class FileBasedQueue:
             with self.lock:
                 # pendingディレクトリから最古のファイルを取得
                 pending_files = list(self.pending_dir.glob("*.json"))
+                logger.debug(
+                    f"pendingディレクトリ {self.pending_dir.absolute()} には "
+                    f"{len(pending_files)} 個のファイルがあります"
+                )
                 if not pending_files:
                     return None
 
@@ -297,7 +301,9 @@ class PredictionQueue:
         self.lock = threading.RLock()
 
         if queue_storage == "file" and queue_dir:
+            logger.info(f"ファイルベースキューを初期化中: queue_dir={queue_dir}")
             self.file_queue = FileBasedQueue(queue_dir)
+            logger.info(f"ファイルキューディレクトリ: {self.file_queue.queue_dir}")
             # 起動時リカバリ：processingファイルをpendingに戻す
             self.file_queue.reset_processing_to_pending()
             self.memory_queue = None
@@ -307,6 +313,7 @@ class PredictionQueue:
 
         self.worker_thread = threading.Thread(target=self._worker, daemon=True)
         self.worker_thread.start()
+        logger.info(f"ワーカースレッドを開始しました: {self.worker_thread.name}")
 
     def submit_task(self, task_id: str, request) -> bool:
         """タスクをキューに追加"""
@@ -326,7 +333,9 @@ class PredictionQueue:
                         request_dict[key] = [v.isoformat() for v in value]
                     else:
                         request_dict[key] = value
-                return self.file_queue.enqueue(task_id, request_dict)
+                result = self.file_queue.enqueue(task_id, request_dict)
+                logger.info(f"ファイルキューへのタスク登録結果: {result}")
+                return result
             else:
                 # メモリベースキュー（サイズ制限あり）
                 self.memory_queue.put((task_id, request), block=False)
@@ -341,6 +350,7 @@ class PredictionQueue:
 
     def _worker(self):
         """ワーカースレッド - キューからタスクを取り出して実行"""
+        logger.info("ワーカースレッドが開始されました")
         while True:
             try:
                 # 実行中タスク数をまずチェック
@@ -352,8 +362,10 @@ class PredictionQueue:
                 # キューからタスクを取得（並列度に余裕がある場合のみ）
                 if self.file_queue:
                     # ファイルベースキュー
+                    logger.debug("ファイルキューからタスクを取得中...")
                     task_data = self.file_queue.dequeue()
                     if task_data is None:
+                        logger.debug("ファイルキューにタスクがありません")
                         time.sleep(1.0)
                         continue
                     task_id, request_dict = task_data

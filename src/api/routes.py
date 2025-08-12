@@ -897,7 +897,9 @@ def run_prediction_task(task_id: str, request: AsyncPredictionRequest):
 
         # 予測モデルの初期化
         predictor = TimeSeriesPredictor(
-            model_name=request.model_name, model_params=request.model_params
+            model_name=request.model_name,
+            model_params=request.model_params,
+            enable_hierarchical_training=False,  # 一時的に無効化
         )
 
         # 進捗更新: モデル初期化完了

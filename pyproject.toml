@@ -40,6 +40,7 @@ exclude = [
     ".venv",
     "env",
     "venv",
+    ".wt",
 ]
 
 [tool.pytest.ini_options]

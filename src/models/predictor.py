@@ -22,6 +22,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 並列処理による競合回
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # MPS実行時のフォールバック有効化
 os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # MPS メモリ使用量調整
 
+# AutoGluonの並列度制限設定
+os.environ["OMP_NUM_THREADS"] = "1"  # OpenMPスレッド数制限
+os.environ["MKL_NUM_THREADS"] = "1"  # Intel MKLスレッド数制限
+os.environ["NUMEXPR_NUM_THREADS"] = "1"  # NumExprスレッド数制限
+
 # AutoGluon-TimeSeriesライブラリをインポート
 try:
     from autogluon.timeseries import TimeSeriesDataFrame
@@ -39,6 +44,12 @@ MODEL_CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
     "config",
     "model_config.yaml",
+)
+
+APP_CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    "config",
+    "app_config.yaml",
 )
 
 # 一時ディレクトリの追跡用グローバル変数
@@ -201,6 +212,18 @@ class TimeSeriesPredictor:
         try:
             with open(MODEL_CONFIG_PATH, "r") as f:
                 config = yaml.safe_load(f)
+
+            # アプリケーション設定も読み込み、並列処理設定を追加
+            try:
+                with open(APP_CONFIG_PATH, "r") as f:
+                    app_config = yaml.safe_load(f)
+                    prediction_config = app_config.get("prediction", {})
+                    config["app_prediction"] = prediction_config
+                    logger.info(f"並列処理設定を読み込みました: {prediction_config}")
+            except Exception as e:
+                logger.warning(f"アプリケーション設定の読み込みに失敗: {e}")
+                config["app_prediction"] = {}
+
             return config
         except Exception as e:
             logger.error(f"モデル設定の読み込みに失敗しました: {e}")
@@ -474,6 +497,16 @@ class TimeSeriesPredictor:
                 preset = None
                 logger.info(f"単一モデル設定を使用: {target_model}")
 
+            # 並列度制限を設定から適用
+            app_prediction_config = self.config.get("app_prediction", {})
+            autogluon_n_jobs = app_prediction_config.get("autogluon_n_jobs", 1)
+
+            # 並列度制限を動的に設定
+            os.environ["OMP_NUM_THREADS"] = str(autogluon_n_jobs)
+            os.environ["MKL_NUM_THREADS"] = str(autogluon_n_jobs)
+            os.environ["NUMEXPR_NUM_THREADS"] = str(autogluon_n_jobs)
+            logger.info(f"AutoGluon並列度を {autogluon_n_jobs} に制限しました")
+
             # 一時ディレクトリ管理を使用してAutoGluon予測を実行
             with temp_directory_manager("ag_ts_model") as temp_model_dir:
                 logger.info(
@@ -526,6 +559,15 @@ class TimeSeriesPredictor:
                         f"設定から読み込んだexcluded_model_types: {excluded_models}"
                     )
                     logger.info(f"model_params全体: {model_params}")
+                    # primary_modelsの取得と適用
+                    primary_models = model_params.get("primary_models", [])
+                    hyperparameters = {}
+                    if primary_models:
+                        # primary_modelsが指定されている場合、それらのモデルのみを使用
+                        for model_name in primary_models:
+                            hyperparameters[model_name] = {}
+                        logger.info(f"primary_modelsを適用: {primary_models}")
+
                     fit_kwargs = {
                         "train_data": time_series_data,
                         "time_limit": time_limit,
@@ -534,6 +576,10 @@ class TimeSeriesPredictor:
                         "skip_model_selection": False,
                         "excluded_model_types": excluded_models,
                     }
+
+                    # primary_modelsが指定されている場合はhyperparametersを追加
+                    if hyperparameters:
+                        fit_kwargs["hyperparameters"] = hyperparameters
 
                     # 単一モデル設定の適用
                     if use_single_model and target_model and predefined_hyperparameters:

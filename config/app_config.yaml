@@ -6,7 +6,7 @@ server:
   port: 8000
   debug: true
   workers: 4
-  reload: true  # 開発環境用
+  reload: false  # Dockerコンテナではファイル変更監視は不要（本番環境モード）
 
 # API設定
 api:
@@ -32,6 +32,14 @@ data:
   raw_dir: "data/raw"
   processed_dir: "data/processed"
   models_dir: "data/models"
+  queue_dir: "data/queue"  # 永続化キューディレクトリ
+
+# 並列処理設定
+prediction:
+  max_concurrent_tasks: 2  # 同時実行可能な予測タスク数
+  queue_storage: "file"    # file: ファイルベース, memory: メモリベース
+  queue_size: -1           # -1: 無制限（ファイルベースの場合）
+  autogluon_n_jobs: 1      # AutoGluon内部の並列度制限
 
 # セキュリティ設定
 security:

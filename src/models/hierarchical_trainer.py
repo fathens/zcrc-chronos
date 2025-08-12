@@ -167,15 +167,7 @@ class HierarchicalTrainer:
 
         except Exception as e:
             logger.error(f"階層的学習でエラー: {e}")
-
-            # フォールバック: 標準のAutoGluon学習
-            return self._fallback_training(
-                predictor_class,
-                predictor_kwargs,
-                time_series_data,
-                excluded_models,
-                time_budget,
-            )
+            raise RuntimeError(f"階層的学習の実行に失敗しました: {e}") from e
 
     def _calculate_time_allocation(
         self, allocation_ratios: Dict[str, float], total_budget: int
@@ -375,52 +367,6 @@ class HierarchicalTrainer:
         except Exception as e:
             logger.warning(f"評価でエラー: {e}")
             return 1.0  # 悪い成績として扱う
-
-    def _fallback_training(
-        self,
-        predictor_class,
-        predictor_kwargs,
-        time_series_data,
-        excluded_models: List[str],
-        time_budget: int,
-    ) -> Tuple[Any, Dict[str, Any]]:
-        """フォールバック: 標準のAutoGluon学習"""
-
-        logger.warning("フォールバック: 標準AutoGluon学習を実行")
-
-        try:
-            # 新しいpredictorインスタンスを作成
-            fallback_predictor = predictor_class(**predictor_kwargs)
-
-            fit_kwargs = {
-                "train_data": time_series_data,
-                "time_limit": time_budget,
-                "excluded_model_types": excluded_models,
-                "presets": "medium_quality",
-                "num_val_windows": 1,
-                "val_step_size": 1,
-                "skip_model_selection": False,
-                "enable_ensemble": True,
-            }
-
-            start_time = time.time()
-            fallback_predictor.fit(**fit_kwargs)
-            training_time = time.time() - start_time
-
-            forecast_result = fallback_predictor.predict(time_series_data)
-
-            metadata = {
-                "hierarchical_training": False,
-                "fallback_used": True,
-                "total_training_time": training_time,
-                "strategy_used": "fallback_standard",
-            }
-
-            return forecast_result, metadata
-
-        except Exception as e:
-            logger.error(f"フォールバック学習も失敗: {e}")
-            raise
 
     def _summarize_results(self) -> Dict[str, Any]:
         """学習結果の要約"""

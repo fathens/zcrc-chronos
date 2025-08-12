@@ -48,9 +48,10 @@ def test_single_model_configuration(model_name, model_params):
         )
 
         # 予測の実行
-        forecast_timestamps, forecast_values, metadata = predictor.zero_shot_predict(
+        result = predictor.zero_shot_predict(
             timestamp=timestamps, values=values, horizon=12
         )
+        forecast_timestamps, forecast_values, metadata = result
 
         # 結果の検証
         logger.info(f"予測結果: {len(forecast_values)} ポイント")
@@ -61,7 +62,8 @@ def test_single_model_configuration(model_name, model_params):
             logger.success(
                 f"✓ 単一モデル設定が適用されました: {metadata.get('target_model')}"
             )
-            logger.info(f"実際に訓練されたモデル: {metadata.get('trained_models', [])}")
+            trained_models = metadata.get("trained_models", [])
+            logger.info(f"実際に訓練されたモデル: {trained_models}")
         else:
             logger.warning("! 単一モデル設定が適用されませんでした")
 

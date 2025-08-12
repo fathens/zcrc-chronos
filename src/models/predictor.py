@@ -615,7 +615,7 @@ class TimeSeriesPredictor:
                         predictor_kwargs = {
                             "path": temp_model_dir,
                             "prediction_length": horizon,
-                            "target": "values",
+                            "target": "target",  # DataFrameのカラム名と一致させる
                             "known_covariates_names": [],
                         }
 

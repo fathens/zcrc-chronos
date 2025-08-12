@@ -16,14 +16,25 @@ from scipy.signal import find_peaks
 class TimeSeriesCharacteristics:
     """時系列データの特性を表すデータクラス"""
 
-    def __init__(self):
-        self.seasonality = {}
-        self.trend = {}
-        self.volatility = 0.0
-        self.missing_pattern = {}
-        self.density = {}
-        self.stationarity = {}
-        self.outliers = {}
+    def __init__(
+        self,
+        trend=None,
+        seasonality=None,
+        volatility=None,
+        stationarity=None,
+        frequency=None,
+        missing_pattern=None,
+        density=None,
+        outliers=None,
+    ):
+        self.trend = trend or {}
+        self.seasonality = seasonality or {}
+        self.volatility = volatility or {}
+        self.stationarity = stationarity or {}
+        self.frequency = frequency or {}
+        self.missing_pattern = missing_pattern or {}
+        self.density = density or {}
+        self.outliers = outliers or {}
 
 
 class TimeSeriesAnalyzer:
@@ -75,6 +86,9 @@ class TimeSeriesAnalyzer:
 
             # 6. 定常性検定
             characteristics.stationarity = self._test_stationarity(values)
+
+            # 7. 頻度推定
+            characteristics.frequency = self._estimate_frequency(timestamps)
 
             logger.info("時系列データ特性分析が完了しました")
 
@@ -442,3 +456,83 @@ class TimeSeriesAnalyzer:
         except Exception as e:
             logger.warning(f"定常性検定でエラー: {e}")
             return {"is_stationary": "unknown", "p_value": 1.0}
+
+    def _estimate_frequency(
+        self, timestamps: List[datetime.datetime]
+    ) -> Dict[str, Any]:
+        """時系列の頻度を推定"""
+        try:
+            if len(timestamps) < 2:
+                return {"estimated": "unknown", "confidence": 0.0}
+
+            # タイムスタンプの差分を計算
+            intervals = []
+            for i in range(1, len(timestamps)):
+                delta = timestamps[i] - timestamps[i - 1]
+                intervals.append(delta.total_seconds())
+
+            # 最も頻繁な間隔を特定
+            median_interval = np.median(intervals)
+
+            # 頻度を分類
+            if median_interval <= 60:  # 1分以下
+                freq = "min"
+            elif median_interval <= 900:  # 15分以下
+                freq = "15min"
+            elif median_interval <= 1800:  # 30分以下
+                freq = "30min"
+            elif median_interval <= 3600:  # 1時間以下
+                freq = "H"
+            elif median_interval <= 86400:  # 1日以下
+                freq = "D"
+            else:
+                freq = "irregular"
+
+            # 信頼度を計算（間隔の一貫性）
+            interval_std = np.std(intervals)
+            cv = interval_std / median_interval if median_interval > 0 else 1.0
+            confidence = max(0.0, 1.0 - cv)
+
+            logger.debug(f"頻度推定: {freq}, 信頼度: {confidence:.3f}")
+
+            return {
+                "estimated": freq,
+                "confidence": confidence,
+                "median_interval_seconds": median_interval,
+            }
+
+        except Exception as e:
+            logger.warning(f"頻度推定でエラー: {e}")
+            return {"estimated": "unknown", "confidence": 0.0}
+
+    def _detect_trend(self, values: List[float]) -> Dict[str, Any]:
+        """線形トレンドの検出"""
+        try:
+            if len(values) < 3:
+                return {"strength": "weak", "slope": 0.0, "r_squared": 0.0}
+
+            x = np.arange(len(values))
+            slope, intercept, r_value, p_value, std_err = stats.linregress(x, values)
+
+            r_squared = r_value**2
+
+            # トレンドの強度分類
+            if r_squared > 0.7:
+                strength = "strong"
+            elif r_squared > 0.3:
+                strength = "moderate"
+            else:
+                strength = "weak"
+
+            logger.debug(f"トレンド検出: {strength}, R²={r_squared:.3f}")
+
+            return {
+                "strength": strength,
+                "slope": float(slope),
+                "r_squared": float(r_squared),
+                "p_value": float(p_value),
+            }
+
+        except Exception as e:
+            logger.warning(f"トレンド検出でエラー: {e}")
+            return {"strength": "weak", "slope": 0.0, "r_squared": 0.0}

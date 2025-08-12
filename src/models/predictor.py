@@ -214,11 +214,27 @@ class TimeSeriesPredictor:
         self.enable_adaptive_selection = enable_adaptive_selection
         self.enable_hierarchical_training = enable_hierarchical_training
 
-        # 新機能のインスタンス
+        # 新機能のインスタンス（設定ファイルのパラメータを使用）
         if self.enable_adaptive_selection:
-            self.adaptive_selector = AdaptiveModelSelector()
+            adaptive_config = self.config.get("prediction", {}).get(
+                "adaptive_selection", {}
+            )
+            self.adaptive_selector = AdaptiveModelSelector(config=adaptive_config)
         if self.enable_hierarchical_training:
-            self.hierarchical_trainer = HierarchicalTrainer(max_workers=2)
+            hierarchical_config = self.config.get("prediction", {}).get(
+                "hierarchical_training", {}
+            )
+            max_workers = hierarchical_config.get("max_workers", 2)
+            # 全体の設定も渡す（adaptive_selection設定も含む）
+            full_config = {
+                **hierarchical_config,
+                "adaptive_selection": self.config.get("prediction", {}).get(
+                    "adaptive_selection", {}
+                ),
+            }
+            self.hierarchical_trainer = HierarchicalTrainer(
+                max_workers=max_workers, config=full_config
+            )
 
     def _load_config(self) -> Dict[str, Any]:
         """

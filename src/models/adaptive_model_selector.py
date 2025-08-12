@@ -4,7 +4,7 @@
 """
 
 import datetime
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from loguru import logger
 
@@ -34,8 +34,12 @@ class ModelSelectionStrategy:
 class AdaptiveModelSelector:
     """データ特性に基づく適応的モデル選択器"""
 
-    def __init__(self):
+    def __init__(self, config: Dict[str, Any] = None):
         self.analyzer = TimeSeriesAnalyzer()
+        self.config = config or {}
+        # 設定可能な閾値パラメータ
+        self.small_dataset_threshold = self.config.get("small_dataset_threshold", 100)
+        self.large_dataset_threshold = self.config.get("large_dataset_threshold", 1000)
         self.strategies = self._initialize_strategies()
 
     def _initialize_strategies(self) -> Dict[str, ModelSelectionStrategy]:
@@ -170,10 +174,10 @@ class AdaptiveModelSelector:
     ) -> ModelSelectionStrategy:
         """特性に基づく戦略決定の中核ロジック"""
 
-        # データサイズによる基本分類
-        if data_size < 50:
+        # データサイズによる基本分類（設定可能な閾値を使用）
+        if data_size < self.small_dataset_threshold:
             base_strategy = "small_dataset"
-        elif data_size > 500:
+        elif data_size > self.large_dataset_threshold:
             base_strategy = "large_dataset"
         else:
             base_strategy = "balanced"

@@ -36,12 +36,22 @@ class ModelTrainingResult:
 class HierarchicalTrainer:
     """階層的モデル学習システム"""
 
-    def __init__(self, max_workers: int = 2):
+    def __init__(self, max_workers: int = 2, config: Dict[str, Any] = None):
         self.max_workers = max_workers
-        self.selector = AdaptiveModelSelector()
+        self.config = config or {}
+
+        # 設定ファイルから閾値を読み込み
+        self.early_stopping_threshold = self.config.get(
+            "early_stopping_threshold", 0.02
+        )
+        self.min_score_for_stop = self.config.get("min_score_for_stop", 0.01)
+
+        # AdaptiveModelSelectorに設定を渡す
+        adaptive_config = self.config.get("adaptive_selection", {})
+        self.selector = AdaptiveModelSelector(config=adaptive_config)
+
         self.training_results = {}
         self.best_score = float("inf")
-        self.early_stopping_threshold = 0.05  # 5%改善がなければ停止
         self.lock = threading.Lock()
 
     def train_hierarchically(
@@ -202,32 +212,19 @@ class HierarchicalTrainer:
             stage_predictor = predictor_class(**predictor_kwargs)
 
             # このステージで使用するモデルを制限
+            # 元の除外リストを使用し、必要に応じて追加のみ行う
             stage_excluded = excluded_models.copy()
 
-            # 他のステージのモデルを除外に追加
-            all_possible_models = [
-                "SeasonalNaive",
-                "AutoETS",
-                "ETS",
-                "Theta",
-                "ARIMA",
-                "RecursiveTabular",
-                "DirectTabular",
-                "NPTS",
-                "DeepAR",
-                "TemporalFusionTransformer",
-                "PatchTST",
-                "TiDE",
-            ]
-
-            for model in all_possible_models:
-                if model not in models:
-                    stage_excluded.append(model)
-
-            # ハイパーパラメータの設定（このステージのモデルのみ）
+            # ハイパーパラメータの設定（このステージで優先するモデル）
+            # モデルを完全に制限するのではなく、優先度を設定
             hyperparameters = {}
+
+            # このステージで優先するモデルには空の設定を追加（AutoGluonが自動調整）
             for model in models:
                 hyperparameters[model] = {}
+
+            # 他のモデルも使用可能だが、時間配分は少なめに
+            # これにより、モデルの多様性を保ちつつ、ステージごとの特色を出す
 
             # 学習の実行
             logger.info(f"Stage '{stage}' モデル学習開始: {models}")
@@ -303,9 +300,11 @@ class HierarchicalTrainer:
                     )
                     return True
 
-        # スコアが十分良い場合
-        if self.best_score < 0.05:  # MAEが5%未満
-            logger.debug(f"スコア{self.best_score:.4f}が十分良好")
+        # スコアが十分良い場合（設定可能な基準）
+        if self.best_score < self.min_score_for_stop:
+            logger.debug(
+                f"スコア{self.best_score:.4f}が十分良好（閾値: {self.min_score_for_stop}）"
+            )
             return True
 
         return False

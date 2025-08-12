@@ -45,7 +45,7 @@ venv.bak/
 .ipynb_checkpoints
 
 # Data
-run_local/data/
+data/
 
 # 一時モデルデータ
 temp_model/

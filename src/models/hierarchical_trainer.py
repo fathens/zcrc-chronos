@@ -279,6 +279,10 @@ class HierarchicalTrainer:
 
         except Exception as e:
             logger.error(f"Stage '{stage}' でエラー: {e}")
+            # より詳細なデバッグ情報
+            import traceback
+
+            logger.debug(f"Stage '{stage}' でのエラー詳細:\n{traceback.format_exc()}")
             return None
 
     def _should_stop_early(self, current_stage: str, models: List[str]) -> bool:
@@ -331,13 +335,29 @@ class HierarchicalTrainer:
 
                 # まだ取得できていない場合の他の方法
                 if predictions is None:
-                    if hasattr(forecast_result, "values"):
+                    # .valuesアトリビュートのチェック
+                    if (
+                        hasattr(forecast_result, "values")
+                        and forecast_result.values is not None
+                    ):
                         predictions = forecast_result.values
-                    elif hasattr(forecast_result, "mean"):
-                        predictions = forecast_result["mean"]
+                    # DataFrame/Seriesスタイルのアクセス
+                    elif hasattr(forecast_result, "__getitem__"):
+                        try:
+                            if "mean" in forecast_result:
+                                predictions = forecast_result["mean"]
+                            elif "values" in forecast_result:
+                                predictions = forecast_result["values"]
+                        except (KeyError, TypeError, AttributeError):
+                            pass
 
             except Exception as extract_error:
                 logger.debug(f"予測値抽出でエラー: {extract_error}")
+                # デバッグ情報を追加
+                logger.debug(f"forecast_result type: {type(forecast_result)}")
+                if hasattr(forecast_result, "__dict__"):
+                    attrs = list(forecast_result.__dict__.keys())
+                    logger.debug(f"forecast_result attributes: {attrs}")
                 return 1.0
 
             # 予測値を数値配列に変換

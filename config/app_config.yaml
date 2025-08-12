@@ -41,6 +41,17 @@ prediction:
   queue_size: -1           # -1: 無制限（ファイルベースの場合）
   autogluon_n_jobs: 1      # AutoGluon内部の並列度制限
 
+  # 適応的モデル選択の設定
+  adaptive_selection:
+    small_dataset_threshold: 100   # 小データセットの閾値（ポイント数）
+    large_dataset_threshold: 1000  # 大データセットの閾値（ポイント数）
+
+  # 階層的学習の設定
+  hierarchical_training:
+    early_stopping_threshold: 0.02  # 改善率閾値（2%）
+    min_score_for_stop: 0.01       # 早期停止のための最小スコア（1%）
+    max_workers: 2                  # 並列ワーカー数
+
 # セキュリティ設定
 security:
   enable_auth: false  # 本番環境ではtrueに設定

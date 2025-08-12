@@ -16,6 +16,10 @@ import pandas as pd
 import yaml
 from loguru import logger
 
+# 新しいモジュールをインポート
+from .adaptive_model_selector import AdaptiveModelSelector
+from .hierarchical_trainer import HierarchicalTrainer
+
 # PyTorch/Transformersの互換性問題を回避するための環境変数設定
 os.environ["TRANSFORMERS_OFFLINE"] = "0"  # オフラインモード無効化
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # 並列処理による競合回避
@@ -189,6 +193,8 @@ class TimeSeriesPredictor:
         self,
         model_name: str = "chronos_default",
         model_params: Optional[Dict[str, Any]] = None,
+        enable_adaptive_selection: bool = True,
+        enable_hierarchical_training: bool = False,
     ):
         """
         初期化
@@ -196,11 +202,39 @@ class TimeSeriesPredictor:
         Args:
             model_name: モデル名
             model_params: モデルパラメータ（設定ファイルの値を上書き）
+            enable_adaptive_selection: 適応的モデル選択を有効にするか
+            enable_hierarchical_training: 階層的学習を有効にするか
         """
         self.model_name = model_name
         self.model_params = model_params or {}
         self.model = None
         self.config = self._load_config()
+
+        # 新機能のフラグ
+        self.enable_adaptive_selection = enable_adaptive_selection
+        self.enable_hierarchical_training = enable_hierarchical_training
+
+        # 新機能のインスタンス（設定ファイルのパラメータを使用）
+        if self.enable_adaptive_selection:
+            adaptive_config = self.config.get("prediction", {}).get(
+                "adaptive_selection", {}
+            )
+            self.adaptive_selector = AdaptiveModelSelector(config=adaptive_config)
+        if self.enable_hierarchical_training:
+            hierarchical_config = self.config.get("prediction", {}).get(
+                "hierarchical_training", {}
+            )
+            max_workers = hierarchical_config.get("max_workers", 2)
+            # 全体の設定も渡す（adaptive_selection設定も含む）
+            full_config = {
+                **hierarchical_config,
+                "adaptive_selection": self.config.get("prediction", {}).get(
+                    "adaptive_selection", {}
+                ),
+            }
+            self.hierarchical_trainer = HierarchicalTrainer(
+                max_workers=max_workers, config=full_config
+            )
 
     def _load_config(self) -> Dict[str, Any]:
         """
@@ -472,25 +506,53 @@ class TimeSeriesPredictor:
                 logger.warning(f"頻度設定に失敗、デフォルトを使用: {e}")
                 # 頻度設定に失敗した場合はそのまま続行
 
-            # AutoGluon-TimeSeries の設定（推奨設定に変更）
-            preset = model_params.get("preset", "high_quality")  # 予測精度を重視
+            # 適応的モデル選択の実行
+            if self.enable_adaptive_selection and not use_single_model:
+                try:
+                    logger.info("適応的モデル選択を実行します")
+                    optimal_strategy = self.adaptive_selector.select_optimal_strategy(
+                        values, timestamp, horizon, model_params.get("time_limit", 900)
+                    )
+
+                    # 戦略に基づく設定の更新
+                    preset = optimal_strategy.preset
+                    excluded_models = optimal_strategy.excluded_models
+                    priority_models = optimal_strategy.priority_models
+
+                    logger.info(f"選択された戦略: {optimal_strategy.strategy_name}")
+                    logger.info(f"優先モデル: {priority_models}")
+                    logger.info(f"除外モデル: {excluded_models}")
+
+                except Exception as e:
+                    logger.warning(
+                        f"適応的モデル選択でエラー: {e}。デフォルト設定を使用"
+                    )
+                    preset = model_params.get("preset", "medium_quality")
+                    excluded_models = model_params.get(
+                        "excluded_model_types", ["Naive"]
+                    )
+                    optimal_strategy = None
+            else:
+                # 従来の設定
+                preset = model_params.get("preset", "medium_quality")
+                excluded_models = model_params.get("excluded_model_types", ["Naive"])
+                optimal_strategy = None
 
             # データサイズに応じた設定の動的調整
             if data_length < 50:
                 # 非常に小さなデータセットの場合
-                preset = "high_quality"  # 予測精度を重視
-                time_limit = 3600  # 1時間に延長（高品質予測のため）
+                if preset != "fast_training":  # 戦略で指定されない限り精度重視
+                    preset = "medium_quality"
+                time_limit = model_params.get("time_limit", 900)  # デフォルト15分
                 logger.warning(
                     f"データサイズが小さいため設定を調整します: data_length={data_length}"
                 )
             elif data_length < 100:
                 # 小さなデータセットの場合
-                preset = "high_quality"  # 予測精度を重視
-                time_limit = model_params.get("time_limit", 3600)  # 1時間に設定
+                time_limit = model_params.get("time_limit", 900)
             else:
                 # 十分なデータがある場合
-                # 1時間に設定（大きなデータセット用）
-                time_limit = model_params.get("time_limit", 3600)
+                time_limit = model_params.get("time_limit", 900)
 
             # 単一モデル使用の場合は設定を無効化
             if use_single_model:
@@ -551,73 +613,146 @@ class TimeSeriesPredictor:
                         f"val_step_size={val_step_size}"
                     )
 
-                    # フィット実行（tuning_data指定でnum_val_windows=0エラーを回避）
-                    excluded_models = model_params.get(
-                        "excluded_model_types", ["Naive"]
-                    )
-                    logger.info(
-                        f"設定から読み込んだexcluded_model_types: {excluded_models}"
-                    )
+                    # excluded_modelsの取得（適応的選択により更新された可能性がある）
+                    logger.info(f"使用するexcluded_model_types: {excluded_models}")
                     logger.info(f"model_params全体: {model_params}")
-                    # primary_modelsの取得と適用
-                    primary_models = model_params.get("primary_models", [])
-                    hyperparameters = {}
-                    if primary_models:
-                        # primary_modelsが指定されている場合、それらのモデルのみを使用
-                        for model_name in primary_models:
-                            hyperparameters[model_name] = {}
-                        logger.info(f"primary_modelsを適用: {primary_models}")
 
-                    fit_kwargs = {
-                        "train_data": time_series_data,
-                        "time_limit": time_limit,
-                        "num_val_windows": num_val_windows,
-                        "val_step_size": val_step_size,
-                        "skip_model_selection": False,
-                        "excluded_model_types": excluded_models,
-                    }
+                    # 階層的学習または従来学習の選択
+                    if (
+                        self.enable_hierarchical_training
+                        and not use_single_model
+                        and optimal_strategy is not None
+                        and data_length >= 20
+                    ):  # 最小データサイズ要件
 
-                    # primary_modelsが指定されている場合はhyperparametersを追加
-                    if hyperparameters:
-                        fit_kwargs["hyperparameters"] = hyperparameters
+                        logger.info("階層的学習を実行します")
 
-                    # 単一モデル設定の適用
-                    if use_single_model and target_model and predefined_hyperparameters:
-                        # 単一モデルの場合はhyperparametersを使用し、presetsを無効化
-                        # Float32 精度を確実に適用
-                        if "torch_dtype" in predefined_hyperparameters.get(
-                            target_model, {}
+                        # 階層的学習の実行
+                        predictor_kwargs = {
+                            "path": temp_model_dir,
+                            "prediction_length": horizon,
+                            "target": "target",  # DataFrameのカラム名と一致させる
+                            "known_covariates_names": [],
+                        }
+
+                        forecast_result, hierarchical_metadata = (
+                            self.hierarchical_trainer.train_hierarchically(
+                                AutoGluonTSPredictor,
+                                predictor_kwargs,
+                                time_series_data,
+                                optimal_strategy,
+                                time_limit,
+                                horizon,
+                                excluded_models,
+                            )
+                        )
+
+                        # model_metadataが初期化されていない場合は初期化
+                        if "model_metadata" not in locals():
+                            model_metadata = {}
+
+                        # メタデータをマージ
+                        if hierarchical_metadata:
+                            model_metadata = {**model_metadata, **hierarchical_metadata}
+
+                        logger.info("階層的学習が完了しました")
+
+                    # 階層的学習が有効で実行された場合の結果チェック
+                    if (
+                        self.enable_hierarchical_training
+                        and not use_single_model
+                        and optimal_strategy is not None
+                        and data_length >= 20
+                    ):
+                        if forecast_result is None:
+                            logger.error("階層的学習が失敗しました")
+                            raise RuntimeError(
+                                "階層的学習による予測に失敗しました。モデル学習でエラーが発生した可能性があります"
+                            )
+                        # 階層的学習が成功した場合はここで処理終了
+                        logger.info("階層的学習による予測が完了しました")
+
+                    # 従来学習が必要な場合（階層的学習が無効または条件を満たさない場合）
+                    elif (
+                        not self.enable_hierarchical_training
+                        or use_single_model
+                        or optimal_strategy is None
+                        or data_length < 20
+                    ):
+                        # 従来のAutoGluon学習
+                        logger.info("従来のAutoGluon学習を実行します")
+
+                        # primary_modelsの取得と適用
+                        primary_models = model_params.get("primary_models", [])
+                        hyperparameters = {}
+                        if primary_models:
+                            # primary_modelsが指定されている場合、それらのモデルのみを使用
+                            for model_name_loop in primary_models:
+                                hyperparameters[model_name_loop] = {}
+                            logger.info(f"primary_modelsを適用: {primary_models}")
+
+                        fit_kwargs = {
+                            "train_data": time_series_data,
+                            "time_limit": time_limit,
+                            "num_val_windows": num_val_windows,
+                            "val_step_size": val_step_size,
+                            "skip_model_selection": False,
+                            "excluded_model_types": excluded_models,
+                        }
+
+                        # primary_modelsが指定されている場合はhyperparametersを追加
+                        if hyperparameters:
+                            fit_kwargs["hyperparameters"] = hyperparameters
+
+                        # 単一モデル設定の適用
+                        if (
+                            use_single_model
+                            and target_model
+                            and predefined_hyperparameters
                         ):
-                            import torch
-
-                            if (
-                                predefined_hyperparameters[target_model]["torch_dtype"]
-                                == "float32"
+                            # 単一モデルの場合はhyperparametersを使用し、presetsを無効化
+                            # Float32 精度を確実に適用
+                            if "torch_dtype" in predefined_hyperparameters.get(
+                                target_model, {}
                             ):
-                                predefined_hyperparameters[target_model][
-                                    "torch_dtype"
-                                ] = torch.float32
-                        fit_kwargs["hyperparameters"] = predefined_hyperparameters
-                        fit_kwargs["enable_ensemble"] = False  # アンサンブルを無効化
-                        fit_kwargs["skip_model_selection"] = (
-                            True  # モデル選択をスキップ
-                        )
-                        logger.info(
-                            f"単一モデル設定を適用: {target_model}, "
-                            f"hyperparameters={predefined_hyperparameters}"
-                        )
-                    else:
-                        # 通常の複数モデル設定
-                        fit_kwargs["presets"] = preset
-                        logger.info(f"複数モデル設定を適用: preset={preset}")
+                                import torch
 
-                    # num_val_windows=0の場合はtuning_dataを明示的に指定
-                    if num_val_windows == 0:
-                        fit_kwargs["tuning_data"] = time_series_data
+                                if (
+                                    predefined_hyperparameters[target_model][
+                                        "torch_dtype"
+                                    ]
+                                    == "float32"
+                                ):
+                                    predefined_hyperparameters[target_model][
+                                        "torch_dtype"
+                                    ] = torch.float32
+                            fit_kwargs["hyperparameters"] = predefined_hyperparameters
+                            fit_kwargs["enable_ensemble"] = (
+                                False  # アンサンブルを無効化
+                            )
+                            fit_kwargs["skip_model_selection"] = (
+                                True  # モデル選択をスキップ
+                            )
+                            logger.info(
+                                f"単一モデル設定を適用: {target_model}, "
+                                f"hyperparameters={predefined_hyperparameters}"
+                            )
+                        else:
+                            # 通常の複数モデル設定
+                            fit_kwargs["presets"] = preset
+                            logger.info(f"複数モデル設定を適用: preset={preset}")
 
-                    # 直接fitを実行（タイムアウト処理を削除）
-                    predictor.fit(**fit_kwargs)
-                    logger.info("AutoGluon fit が完了しました")
+                        # num_val_windows=0の場合はtuning_dataを明示的に指定
+                        if num_val_windows == 0:
+                            fit_kwargs["tuning_data"] = time_series_data
+
+                        # 直接fitを実行
+                        predictor.fit(**fit_kwargs)
+                        logger.info("AutoGluon fit が完了しました")
+
+                        # 予測を実行
+                        forecast_result = predictor.predict(time_series_data)
+                        logger.info(f"予測が完了しました: {type(forecast_result)}")
                 except Exception as fit_error:
                     logger.error(f"AutoGluon fit でエラーが発生しました: {fit_error}")
                     # エラー時は即座に失敗として処理（フォールバック無し）
@@ -625,9 +760,7 @@ class TimeSeriesPredictor:
                         f"モデル '{target_model}' の学習に失敗しました: {fit_error}"
                     )
 
-                # 予測を実行
-                forecast_result = predictor.predict(time_series_data)
-                logger.info(f"予測が完了しました: {type(forecast_result)}")
+                # forecast_resultは階層的学習または従来学習で既に設定済み
 
                 # 予測結果から値を取得（実際のAPIに合わせて修正）
                 try:
@@ -673,14 +806,15 @@ class TimeSeriesPredictor:
                         # その他の形式の場合
                         forecast_values = list(forecast_result)
                         if len(forecast_values) == 0:
-                            # 予測値がない場合はゼロ埋め
-                            forecast_values = [0.0] * horizon
+                            # 予測値が空の場合は失敗として扱う
+                            raise ValueError(
+                                "予測結果が空でした。モデル学習または予測に失敗した可能性があります"
+                            )
                 except Exception as access_error:
-                    logger.warning(
-                        f"予測結果へのアクセス方法が想定と異なります: {access_error}"
+                    logger.error(f"予測結果の抽出に失敗しました: {access_error}")
+                    raise RuntimeError(
+                        f"予測結果へのアクセスに失敗しました: {access_error}"
                     )
-                    # エラーが発生した場合は、ゼロ埋めデータを返す
-                    forecast_values = [0.0] * horizon
 
                 # 信頼区間の取得を試みる
                 confidence_intervals = {}
@@ -776,22 +910,47 @@ class TimeSeriesPredictor:
                 # 実際に使用されたモデルの情報を取得
                 trained_models = []
                 try:
-                    if hasattr(predictor, "model_names"):
-                        trained_models = predictor.model_names()
-                    elif hasattr(predictor, "get_model_names"):
-                        trained_models = predictor.get_model_names()
-                    elif hasattr(predictor, "_trainer") and hasattr(
-                        predictor._trainer, "model_names"
+                    # 階層的学習の場合、メタデータから取得
+                    if (
+                        hasattr(self, "hierarchical_trainer")
+                        and hasattr(self.hierarchical_trainer, "training_results")
+                        and self.hierarchical_trainer.training_results
                     ):
-                        trained_models = list(predictor._trainer.model_names())
+                        # 階層的学習の結果から使用されたモデルを取得
+                        hierarchical_models = []
+                        for (
+                            stage,
+                            result,
+                        ) in self.hierarchical_trainer.training_results.items():
+                            stage_models = result.metadata.get("models_used", [])
+                            hierarchical_models.extend(stage_models)
+                        if hierarchical_models:
+                            trained_models = list(set(hierarchical_models))  # 重複除去
+                            logger.info(
+                                f"階層的学習で使用されたモデル: {trained_models}"
+                            )
+                        else:
+                            trained_models = ["hierarchical_ensemble"]
+                    elif "predictor" in locals() and predictor is not None:
+                        # 従来学習の場合
+                        if hasattr(predictor, "model_names"):
+                            trained_models = predictor.model_names()
+                        elif hasattr(predictor, "get_model_names"):
+                            trained_models = predictor.get_model_names()
+                        elif hasattr(predictor, "_trainer") and hasattr(
+                            predictor._trainer, "model_names"
+                        ):
+                            trained_models = list(predictor._trainer.model_names())
+                        else:
+                            trained_models = ["unknown"]
+                        logger.info(f"実際に訓練されたモデル: {trained_models}")
                     else:
-                        trained_models = ["unknown"]
-                    logger.info(f"実際に訓練されたモデル: {trained_models}")
+                        trained_models = ["unknown_model"]
                 except Exception as e:
                     logger.warning(f"訓練されたモデル名の取得に失敗: {e}")
                     trained_models = ["unknown"]
 
-                # モデルのメタデータを設定
+                # モデルのメタデータを設定（初期値）
                 model_metadata = {
                     # テスト互換性のためにmodel_typeはchronos_boltのままにする
                     "model_type": "chronos_bolt",  # 以前のテストとの互換性のため
@@ -804,6 +963,8 @@ class TimeSeriesPredictor:
                     "use_single_model": use_single_model,  # 単一モデル設定フラグ
                     "target_model": target_model,  # 指定されたターゲットモデル
                     "trained_models": trained_models,  # 実際に訓練されたモデル一覧
+                    "adaptive_selection_enabled": self.enable_adaptive_selection,
+                    "hierarchical_training_enabled": self.enable_hierarchical_training,
                 }
 
                 # 必要に応じて予測値とタイムスタンプをhorizon長に切り詰める
@@ -861,7 +1022,6 @@ class TimeSeriesPredictor:
             logger.info(f"モデルの保存が完了しました: {path}")
         except Exception as e:
             logger.error(f"モデルの保存に失敗しました: {e}")
-            raise ValueError(f"モデルの保存に失敗しました: {e}")
 
     @classmethod
     def load_model(cls, path: str) -> "TimeSeriesPredictor":

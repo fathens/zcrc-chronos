@@ -121,7 +121,7 @@ class HierarchicalTrainer:
                     stage,
                 )
 
-                if stage_result:
+                if stage_result is not None:
                     final_result = stage_result
                     final_metadata.update(
                         {

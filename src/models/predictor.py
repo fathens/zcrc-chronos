@@ -641,7 +641,14 @@ class TimeSeriesPredictor:
 
                         logger.info("階層的学習が完了しました")
 
-                    else:
+                    # 階層的学習またはフォールバックが必要な場合のフロー制御
+                    if (
+                        not self.enable_hierarchical_training
+                        or use_single_model
+                        or optimal_strategy is None
+                        or data_length < 20
+                        or forecast_result is None
+                    ):
                         # 従来のAutoGluon学習
                         logger.info("従来のAutoGluon学習を実行します")
 
@@ -872,17 +879,42 @@ class TimeSeriesPredictor:
                 # 実際に使用されたモデルの情報を取得
                 trained_models = []
                 try:
-                    if hasattr(predictor, "model_names"):
-                        trained_models = predictor.model_names()
-                    elif hasattr(predictor, "get_model_names"):
-                        trained_models = predictor.get_model_names()
-                    elif hasattr(predictor, "_trainer") and hasattr(
-                        predictor._trainer, "model_names"
+                    # 階層的学習の場合、メタデータから取得
+                    if (
+                        hasattr(self, "hierarchical_trainer")
+                        and hasattr(self.hierarchical_trainer, "training_results")
+                        and self.hierarchical_trainer.training_results
                     ):
-                        trained_models = list(predictor._trainer.model_names())
+                        # 階層的学習の結果から使用されたモデルを取得
+                        hierarchical_models = []
+                        for (
+                            stage,
+                            result,
+                        ) in self.hierarchical_trainer.training_results.items():
+                            stage_models = result.metadata.get("models_used", [])
+                            hierarchical_models.extend(stage_models)
+                        if hierarchical_models:
+                            trained_models = list(set(hierarchical_models))  # 重複除去
+                            logger.info(
+                                f"階層的学習で使用されたモデル: {trained_models}"
+                            )
+                        else:
+                            trained_models = ["hierarchical_ensemble"]
+                    elif "predictor" in locals() and predictor is not None:
+                        # 従来学習の場合
+                        if hasattr(predictor, "model_names"):
+                            trained_models = predictor.model_names()
+                        elif hasattr(predictor, "get_model_names"):
+                            trained_models = predictor.get_model_names()
+                        elif hasattr(predictor, "_trainer") and hasattr(
+                            predictor._trainer, "model_names"
+                        ):
+                            trained_models = list(predictor._trainer.model_names())
+                        else:
+                            trained_models = ["unknown"]
+                        logger.info(f"実際に訓練されたモデル: {trained_models}")
                     else:
-                        trained_models = ["unknown"]
-                    logger.info(f"実際に訓練されたモデル: {trained_models}")
+                        trained_models = ["unknown_model"]
                 except Exception as e:
                     logger.warning(f"訓練されたモデル名の取得に失敗: {e}")
                     trained_models = ["unknown"]

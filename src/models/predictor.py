@@ -612,10 +612,6 @@ class TimeSeriesPredictor:
                         logger.info("階層的学習を実行します")
 
                         # 階層的学習の実行
-                        from autogluon.timeseries import (
-                            TimeSeriesPredictor as AutoGluonTSPredictor,
-                        )
-
                         predictor_kwargs = {
                             "path": temp_model_dir,
                             "prediction_length": horizon,

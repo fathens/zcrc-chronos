@@ -194,7 +194,7 @@ class TimeSeriesPredictor:
         model_name: str = "chronos_default",
         model_params: Optional[Dict[str, Any]] = None,
         enable_adaptive_selection: bool = True,
-        enable_hierarchical_training: bool = True,
+        enable_hierarchical_training: bool = False,
     ):
         """
         初期化

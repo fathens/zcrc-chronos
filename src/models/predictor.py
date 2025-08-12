@@ -612,9 +612,21 @@ class TimeSeriesPredictor:
                         logger.info("階層的学習を実行します")
 
                         # 階層的学習の実行
+                        from autogluon.timeseries import (
+                            TimeSeriesPredictor as AutoGluonTSPredictor,
+                        )
+
+                        predictor_kwargs = {
+                            "path": temp_model_dir,
+                            "prediction_length": horizon,
+                            "target": "values",
+                            "known_covariates_names": [],
+                        }
+
                         forecast_result, hierarchical_metadata = (
                             self.hierarchical_trainer.train_hierarchically(
-                                predictor,
+                                AutoGluonTSPredictor,
+                                predictor_kwargs,
                                 time_series_data,
                                 optimal_strategy,
                                 time_limit,

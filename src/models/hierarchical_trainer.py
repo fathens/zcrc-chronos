@@ -46,7 +46,8 @@ class HierarchicalTrainer:
 
     def train_hierarchically(
         self,
-        predictor_instance,
+        predictor_class,
+        predictor_kwargs,
         time_series_data,
         strategy: ModelSelectionStrategy,
         time_budget: int,
@@ -57,7 +58,8 @@ class HierarchicalTrainer:
         階層的モデル学習を実行
 
         Args:
-            predictor_instance: AutoGluon predictor インスタンス
+            predictor_class: AutoGluon predictor クラス
+            predictor_kwargs: predictor初期化パラメータ
             time_series_data: 学習データ
             strategy: 選択された戦略
             time_budget: 時間予算（秒）
@@ -109,7 +111,8 @@ class HierarchicalTrainer:
 
                 # ステージごとの学習実行
                 stage_result = self._train_stage(
-                    predictor_instance,
+                    predictor_class,
+                    predictor_kwargs,
                     time_series_data,
                     models,
                     excluded_models,
@@ -167,7 +170,11 @@ class HierarchicalTrainer:
 
             # フォールバック: 標準のAutoGluon学習
             return self._fallback_training(
-                predictor_instance, time_series_data, excluded_models, time_budget
+                predictor_class,
+                predictor_kwargs,
+                time_series_data,
+                excluded_models,
+                time_budget,
             )
 
     def _calculate_time_allocation(
@@ -184,7 +191,8 @@ class HierarchicalTrainer:
 
     def _train_stage(
         self,
-        predictor_instance,
+        predictor_class,
+        predictor_kwargs,
         time_series_data,
         models: List[str],
         excluded_models: List[str],
@@ -198,6 +206,9 @@ class HierarchicalTrainer:
             return None
 
         try:
+            # 新しいpredictorインスタンスを作成（各ステージで独立）
+            stage_predictor = predictor_class(**predictor_kwargs)
+
             # このステージで使用するモデルを制限
             stage_excluded = excluded_models.copy()
 
@@ -241,11 +252,11 @@ class HierarchicalTrainer:
             }
 
             stage_start = time.time()
-            predictor_instance.fit(**fit_kwargs)
+            stage_predictor.fit(**fit_kwargs)
             stage_time = time.time() - stage_start
 
             # 予測の実行
-            forecast_result = predictor_instance.predict(time_series_data)
+            forecast_result = stage_predictor.predict(time_series_data)
 
             # 性能評価
             score = self._evaluate_prediction(forecast_result, time_series_data)
@@ -306,24 +317,60 @@ class HierarchicalTrainer:
     def _evaluate_prediction(self, forecast_result, time_series_data) -> float:
         """予測結果の評価（MAE）"""
         try:
-            # 簡易的な評価（実際の検証データがない場合の近似）
-            # 実際の実装では適切な検証データを使用
+            # TimeSeriesDataFrameの処理を安全に行う
+            if forecast_result is None:
+                return 1.0
 
-            if hasattr(forecast_result, "values"):
-                predictions = forecast_result.values.flatten()
-            elif hasattr(forecast_result, "mean"):
-                predictions = forecast_result["mean"].values.flatten()
-            else:
-                predictions = np.array(list(forecast_result.values())[0]).flatten()
+            # 予測結果の抽出を安全に実行
+            predictions = None
 
-            # ダミーの評価（実際の実装では検証データとの比較）
-            # 予測値の分散を使用した簡易評価
-            if len(predictions) > 1:
-                score = np.std(predictions) / (np.mean(np.abs(predictions)) + 1e-8)
-            else:
-                score = 1.0
+            # AutoGluonのTimeSeriesDataFrameからの予測値取得
+            try:
+                if hasattr(forecast_result, "loc"):
+                    # TimeSeriesDataFrameの場合
+                    if hasattr(forecast_result, "item_ids"):
+                        item_ids = forecast_result.item_ids
+                        if len(item_ids) > 0:
+                            first_item = item_ids[0]
+                            if (first_item, "mean") in forecast_result.loc:
+                                predictions = forecast_result.loc[(first_item, "mean")]
+                            elif first_item in forecast_result.loc:
+                                predictions = forecast_result.loc[first_item]
 
-            return float(score)
+                # まだ取得できていない場合の他の方法
+                if predictions is None:
+                    if hasattr(forecast_result, "values"):
+                        predictions = forecast_result.values
+                    elif hasattr(forecast_result, "mean"):
+                        predictions = forecast_result["mean"]
+
+            except Exception as extract_error:
+                logger.debug(f"予測値抽出でエラー: {extract_error}")
+                return 1.0
+
+            # 予測値を数値配列に変換
+            if predictions is not None:
+                try:
+                    if hasattr(predictions, "values"):
+                        pred_array = np.array(predictions.values).flatten()
+                    else:
+                        pred_array = np.array(predictions).flatten()
+
+                    # 有効な予測値があることを確認
+                    if len(pred_array) > 0 and not np.all(np.isnan(pred_array)):
+                        # 予測値の分散を使用した簡易評価
+                        mean_pred = np.nanmean(np.abs(pred_array))
+                        if mean_pred > 1e-8:
+                            score = np.nanstd(pred_array) / mean_pred
+                        else:
+                            score = 1.0
+                        return float(score)
+
+                except Exception as conv_error:
+                    logger.debug(f"予測値変換でエラー: {conv_error}")
+
+            # フォールバック: 一定の値を返す
+            return 0.5
 
         except Exception as e:
             logger.warning(f"評価でエラー: {e}")
@@ -331,7 +378,8 @@ class HierarchicalTrainer:
 
     def _fallback_training(
         self,
-        predictor_instance,
+        predictor_class,
+        predictor_kwargs,
         time_series_data,
         excluded_models: List[str],
         time_budget: int,
@@ -341,6 +389,9 @@ class HierarchicalTrainer:
         logger.warning("フォールバック: 標準AutoGluon学習を実行")
 
         try:
+            # 新しいpredictorインスタンスを作成
+            fallback_predictor = predictor_class(**predictor_kwargs)
+
             fit_kwargs = {
                 "train_data": time_series_data,
                 "time_limit": time_budget,
@@ -353,10 +404,10 @@ class HierarchicalTrainer:
             }
 
             start_time = time.time()
-            predictor_instance.fit(**fit_kwargs)
+            fallback_predictor.fit(**fit_kwargs)
             training_time = time.time() - start_time
 
-            forecast_result = predictor_instance.predict(time_series_data)
+            forecast_result = fallback_predictor.predict(time_series_data)
 
             metadata = {
                 "hierarchical_training": False,

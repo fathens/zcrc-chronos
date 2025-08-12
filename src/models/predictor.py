@@ -649,6 +649,13 @@ class TimeSeriesPredictor:
                         or data_length < 20
                         or forecast_result is None
                     ):
+                        if (
+                            forecast_result is None
+                            and self.enable_hierarchical_training
+                        ):
+                            logger.warning(
+                                "階層的学習が失敗しました。従来学習にフォールバックします"
+                            )
                         # 従来のAutoGluon学習
                         logger.info("従来のAutoGluon学習を実行します")
 
@@ -776,14 +783,22 @@ class TimeSeriesPredictor:
                         # その他の形式の場合
                         forecast_values = list(forecast_result)
                         if len(forecast_values) == 0:
-                            # 予測値がない場合はゼロ埋め
-                            forecast_values = [0.0] * horizon
+                            # 予測値が空の場合はフォールバックを試行
+                            logger.warning(
+                                "予測結果が空でした。フォールバック予測を実行します"
+                            )
+                            forecast_values = self._generate_fallback_prediction(
+                                values, timestamp, horizon
+                            )
                 except Exception as access_error:
                     logger.warning(
                         f"予測結果へのアクセス方法が想定と異なります: {access_error}"
                     )
-                    # エラーが発生した場合は、ゼロ埋めデータを返す
-                    forecast_values = [0.0] * horizon
+                    # エラーが発生した場合は、フォールバック予測を実行
+                    logger.info("フォールバック予測を実行します")
+                    forecast_values = self._generate_fallback_prediction(
+                        values, timestamp, horizon
+                    )
 
                 # 信頼区間の取得を試みる
                 confidence_intervals = {}
@@ -991,7 +1006,90 @@ class TimeSeriesPredictor:
             logger.info(f"モデルの保存が完了しました: {path}")
         except Exception as e:
             logger.error(f"モデルの保存に失敗しました: {e}")
-            raise ValueError(f"モデルの保存に失敗しました: {e}")
+
+    def _generate_fallback_prediction(
+        self, values: List[float], timestamps: List[datetime.datetime], horizon: int
+    ) -> List[float]:
+        """
+        フォールバック予測を生成
+
+        Args:
+            values: 時系列の値
+            timestamps: タイムスタンプ
+            horizon: 予測期間
+
+        Returns:
+            List[float]: フォールバック予測値
+        """
+        logger.info("フォールバック予測メソッドを実行しています")
+
+        if not values or len(values) == 0:
+            logger.error("予測用のデータが存在しません")
+            raise ValueError("予測用のデータが存在しません")
+
+        try:
+            # 方法1: 最後の値を使用した単純な予測
+            if len(values) == 1:
+                logger.info("単一データポイント: 最後の値を使用")
+                return [values[-1]] * horizon
+
+            # 方法2: 線形トレンドベースの予測
+            if len(values) >= 3:
+                logger.info("線形トレンド予測を実行")
+                # 最後の数ポイント（最大10点）でトレンドを計算
+                recent_points = min(10, len(values))
+                recent_values = values[-recent_points:]
+                x = list(range(len(recent_values)))
+
+                # 線形回帰による傾き計算
+                from scipy import stats
+
+                slope, intercept, r_value, p_value, std_err = stats.linregress(
+                    x, recent_values
+                )
+
+                # R²値が低い場合は単純な平均を使用
+                if abs(r_value) < 0.3:
+                    logger.info(
+                        f"トレンド不明確（R²={r_value**2:.3f}）、平均値予測を使用"
+                    )
+                    avg_value = sum(recent_values) / len(recent_values)
+                    return [avg_value] * horizon
+
+                # トレンド予測の生成
+                last_x = len(recent_values) - 1
+                predictions = []
+                for i in range(1, horizon + 1):
+                    pred_value = slope * (last_x + i) + intercept
+                    predictions.append(pred_value)
+
+                logger.info(
+                    f"線形トレンド予測完了: slope={slope:.4f}, R²={r_value**2:.3f}"
+                )
+                return predictions
+
+            # 方法3: 移動平均ベースの予測（データが少ない場合）
+            else:
+                logger.info("移動平均予測を実行")
+                avg_value = sum(values) / len(values)
+
+                # 最後の値との加重平均
+                last_value = values[-1]
+                weighted_pred = (avg_value * 0.3) + (last_value * 0.7)
+
+                return [weighted_pred] * horizon
+
+        except Exception as e:
+            logger.error(f"フォールバック予測でエラー: {e}")
+
+            # 最終フォールバック: 最後の値
+            if values:
+                last_value = values[-1]
+                logger.info(f"最終フォールバック: 最後の値 {last_value} を使用")
+                return [last_value] * horizon
+            else:
+                logger.error("予測不可能: データなし")
+                raise ValueError("予測を生成できません：有効なデータが存在しません")
 
     @classmethod
     def load_model(cls, path: str) -> "TimeSeriesPredictor":

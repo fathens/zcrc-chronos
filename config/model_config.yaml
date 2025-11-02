@@ -151,7 +151,7 @@ default_model:
     eval_metric: "mean_absolute_error"
     verbosity: 2
     presets: "medium_quality"
-    time_limit: 900
+    time_limit: 10000
     excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
 
 # サーバーデフォルトモデル設定（CLIで使用）
@@ -170,7 +170,7 @@ server_default:
     eval_metric: "mean_absolute_error"
     verbosity: 2
     presets: "medium_quality"
-    time_limit: 900
+    time_limit: 10000
     excluded_model_types: ["Naive", "Chronos", "TemporalFusionTransformer"]
 
     # Prophetモデル固有のパラメータ
@@ -197,7 +197,7 @@ server_default:
 
     # AutoGluon固有のパラメータ
     autogluon_params:
-      time_limit: 900  # 学習時間制限（秒）
+      time_limit: 10000  # 学習時間制限（秒）
       eval_metric: "mean_absolute_error"
       presets: "medium_quality"
 

@@ -432,13 +432,26 @@ class PredictionQueue:
                     if self.file_queue:
                         self.file_queue.mark_completed(captured_task_id, True)
                     # TaskManagerの状態も更新
+                    # FAILEDステータスは上書きしない
                     try:
-                        task_manager.update_task(
-                            captured_task_id, status=PredictionStatus.COMPLETED
-                        )
-                        logger.info(
-                            f"タスク {captured_task_id} のTaskManager状態を更新しました"
-                        )
+                        current_task = task_manager.get_task(captured_task_id)
+                        if (
+                            current_task
+                            and current_task.status != PredictionStatus.FAILED
+                        ):
+                            task_manager.update_task(
+                                captured_task_id, status=PredictionStatus.COMPLETED
+                            )
+                            logger.info(
+                                f"タスク {captured_task_id} のTaskManager状態を更新しました"
+                            )
+                        elif (
+                            current_task
+                            and current_task.status == PredictionStatus.FAILED
+                        ):
+                            logger.info(
+                                f"タスク {captured_task_id} はFAILED状態のため、COMPLETEDに更新しません"
+                            )
                     except Exception as e:
                         logger.error(
                             f"タスク {captured_task_id} のTaskManager状態更新に失敗: {e}"
